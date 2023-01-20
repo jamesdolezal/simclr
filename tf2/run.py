@@ -21,7 +21,7 @@ import os
 
 from absl import app
 from absl import flags
-from absl import logging
+from slideflow import log as logging
 import data as data_lib
 import metrics
 import model as model_lib
@@ -29,9 +29,7 @@ import objective as obj_lib
 import tensorflow.compat.v2 as tf
 import tensorflow_datasets as tfds
 
-
-
-FLAGS = flags.FLAGS
+from data_util import FLAGS
 
 
 flags.DEFINE_float(
@@ -463,13 +461,14 @@ def _restore_latest_or_from_pretrain(checkpoint_manager):
         x.assign(tf.zeros_like(x))
 
 
-def main(argv):
-  if len(argv) > 1:
-    raise app.UsageError('Too many command-line arguments.')
+def run(builder=None, flags=None):
+  # Temporary workaround for command-line flags
+  for f in flags:
+    FLAGS[f] = flags[f]
 
-
-  builder = tfds.builder(FLAGS.dataset, data_dir=FLAGS.data_dir)
-  builder.download_and_prepare()
+  if builder is None:
+    builder = tfds.builder(FLAGS.dataset, data_dir=FLAGS.data_dir)
+    builder.download_and_prepare()
   num_train_examples = builder.info.splits[FLAGS.train_split].num_examples
   num_eval_examples = builder.info.splits[FLAGS.eval_split].num_examples
   num_classes = builder.info.features['label'].num_classes
@@ -663,6 +662,14 @@ def main(argv):
                          checkpoint_manager.latest_checkpoint, strategy,
                          topology)
 
+
+def main(argv):
+  # Temporary workaround for command-line flags
+  for f in flags.FLAGS:
+    FLAGS[f] = flags.FLAGS[f].value
+  if len(argv) > 1:
+    raise app.UsageError('Too many command-line arguments.')
+  run()
 
 if __name__ == '__main__':
   tf.compat.v1.enable_v2_behavior()

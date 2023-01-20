@@ -20,11 +20,11 @@ Residual networks (ResNets) were proposed in:
     Deep Residual Learning for Image Recognition. arXiv:1512.03385
 """
 
-from absl import flags
 import tensorflow.compat.v2 as tf
 
+from data_util import FLAGS
 
-FLAGS = flags.FLAGS
+
 BATCH_NORM_EPSILON = 1e-5
 
 

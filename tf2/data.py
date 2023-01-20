@@ -16,14 +16,58 @@
 """Data pipeline."""
 
 import functools
-from absl import flags
-from absl import logging
+from slideflow import log as logging
 
 import data_util
 import tensorflow.compat.v2 as tf
 import tensorflow_datasets as tfds
 
-FLAGS = flags.FLAGS
+from data_util import FLAGS
+
+
+class SlideflowBuilder:
+
+    def __init__(self, dataset, labels=None, num_classes=None, val_kwargs=None):
+        """Build a training/validet."""
+        if labels is not None and num_classes is None:
+            raise ValueError("If labels is not None, must specify `num_classes`")
+
+        self.labels = labels
+        if val_kwargs is not None:
+            self.train_dts, self.val_dts = dataset.train_val_split(
+                labels=self.labels,
+                **val_kwargs
+            )
+            val_tiles = self.val_dts.num_tiles
+        else:
+            self.train_dts = dataset
+            self.val_dts = None
+            val_tiles = 0
+
+        self.info = data_util.EasyDict(
+            features=data_util.EasyDict(
+                label=data_util.EasyDict(num_classes=num_classes)
+            ),
+            splits=data_util.EasyDict(
+                train=data_util.EasyDict(num_examples=self.train_dts.num_tiles),
+                validation=data_util.EasyDict(num_examples=val_tiles)
+            ))
+
+    def as_dataset(self, split, read_config, shuffle_files, as_supervised):
+        if split == 'train':
+            dts = self.train_dts
+        elif split == 'validation':
+            dts = self.val_dts
+        else:
+            raise ValueError(f"Unrecognized split {split}, expected 'train' "
+                             "or 'validation'.")
+        return dts.tensorflow(
+            labels=self.labels,
+            num_shards=read_config.input_context.num_input_pipelines,
+            shard_idx=read_config.input_context.input_pipeline_id,
+            deterministic=True,
+            standardize=False
+        )
 
 
 def build_input_fn(builder, global_batch_size, topology, is_training):

@@ -16,14 +16,13 @@
 """Model specification for SimCLR."""
 
 import math
-from absl import flags
 
 import data_util
 import lars_optimizer
 import resnet
 import tensorflow.compat.v2 as tf
 
-FLAGS = flags.FLAGS
+from data_util import FLAGS
 
 
 def build_optimizer(learning_rate):

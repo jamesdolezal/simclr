@@ -15,7 +15,7 @@
 # ==============================================================================
 """Training utilities."""
 
-from absl import logging
+from slideflow import log as logging
 
 import tensorflow.compat.v2 as tf
 
