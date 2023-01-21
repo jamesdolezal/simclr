@@ -17,12 +17,11 @@
 
 import math
 
-import data_util
-import lars_optimizer
-import resnet
 import tensorflow.compat.v2 as tf
-
-from data_util import FLAGS
+from . import data_util
+from . import lars_optimizer
+from . import resnet
+from .data_util import FLAGS
 
 
 def build_optimizer(learning_rate):
@@ -224,11 +223,11 @@ class SupervisedHead(tf.keras.layers.Layer):
     return inputs
 
 
-class Model(tf.keras.models.Model):
+class SimCLR(tf.keras.models.Model):
   """Resnet model with projection or supervised layer."""
 
   def __init__(self, num_classes, **kwargs):
-    super(Model, self).__init__(**kwargs)
+    super(SimCLR, self).__init__(**kwargs)
     self.resnet_model = resnet.resnet(
         resnet_depth=FLAGS.resnet_depth,
         width_multiplier=FLAGS.width_multiplier,

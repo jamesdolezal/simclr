@@ -22,7 +22,7 @@ Residual networks (ResNets) were proposed in:
 
 import tensorflow.compat.v2 as tf
 
-from data_util import FLAGS
+from .data_util import FLAGS
 
 
 BATCH_NORM_EPSILON = 1e-5

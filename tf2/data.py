@@ -18,55 +18,70 @@
 import functools
 from slideflow import log as logging
 
-import data_util
+from . import data_util
+from .data_util import FLAGS
 import tensorflow.compat.v2 as tf
 import tensorflow_datasets as tfds
-
-from data_util import FLAGS
 
 
 class SlideflowBuilder:
 
-    def __init__(self, dataset, labels=None, num_classes=None, val_kwargs=None):
+    def __init__(self, train_dts=None, val_dts=None, test_dts=None, labels=None, num_classes=None, val_kwargs=None, dataset_kwargs=None):
         """Build a training/validet."""
+        if train_dts is None and val_dts is None and test_dts is None:
+            raise ValueError("Must supply either train_dts, val_dts, or test_dts.")
         if labels is not None and num_classes is None:
             raise ValueError("If labels is not None, must specify `num_classes`")
+        if val_kwargs is not None and val_dts is not None:
+            raise ValueError("Cannot supply val_kwargs if val_dts is not None")
+        if val_kwargs is not None and train_dts is None:
+            raise ValueError("Cannot supply val_kwargs if train_dts is None")
 
         self.labels = labels
         if val_kwargs is not None:
-            self.train_dts, self.val_dts = dataset.train_val_split(
+            self.train_dts, self.val_dts = train_dts.train_val_split(
                 labels=self.labels,
                 **val_kwargs
             )
-            val_tiles = self.val_dts.num_tiles
         else:
-            self.train_dts = dataset
-            self.val_dts = None
-            val_tiles = 0
+            self.train_dts = train_dts
+            self.val_dts = val_dts
+            self.test_dts = test_dts
 
+        self.dataset_kwargs = dict() if dataset_kwargs is None else dataset_kwargs
         self.info = data_util.EasyDict(
             features=data_util.EasyDict(
                 label=data_util.EasyDict(num_classes=num_classes)
             ),
             splits=data_util.EasyDict(
-                train=data_util.EasyDict(num_examples=self.train_dts.num_tiles),
-                validation=data_util.EasyDict(num_examples=val_tiles)
+                train=data_util.EasyDict(num_examples=(0 if not self.train_dts else self.train_dts.num_tiles)),
+                validation=data_util.EasyDict(num_examples=(0 if not self.val_dts else self.val_dts.num_tiles)),
+                test=data_util.EasyDict(num_examples=(0 if not self.test_dts else self.test_dts.num_tiles))
             ))
 
     def as_dataset(self, split, read_config, shuffle_files, as_supervised):
+        logging.info(f"Dataset split requested: {split}")
+        if split == 'validation': split = 'test'
         if split == 'train':
             dts = self.train_dts
         elif split == 'validation':
             dts = self.val_dts
+        elif split == 'test':
+            dts = self.test_dts
         else:
             raise ValueError(f"Unrecognized split {split}, expected 'train' "
-                             "or 'validation'.")
+                             "'validation', or 'test'.")
+        if dts is None:
+            raise ValueError(f"Builder not configured for phase {split}.")
+
         return dts.tensorflow(
             labels=self.labels,
             num_shards=read_config.input_context.num_input_pipelines,
             shard_idx=read_config.input_context.input_pipeline_id,
             deterministic=True,
-            standardize=False
+            standardize=False,
+            infinite=(split != 'test'),
+            **self.dataset_kwargs
         )
 
 
@@ -93,7 +108,7 @@ def build_input_fn(builder, global_batch_size, topology, is_training):
     preprocess_fn_finetune = get_preprocess_fn(is_training, is_pretrain=False)
     num_classes = builder.info.features['label'].num_classes
 
-    def map_fn(image, label):
+    def map_fn(image, label, *args):
       """Produces multiple transformations of the same batch."""
       if is_training and FLAGS.train_mode == 'pretrain':
         xs = []
@@ -102,8 +117,9 @@ def build_input_fn(builder, global_batch_size, topology, is_training):
         image = tf.concat(xs, -1)
       else:
         image = preprocess_fn_finetune(image)
-      label = tf.one_hot(label, num_classes)
-      return image, label
+      if num_classes:
+        label = tf.one_hot(label, num_classes)
+      return image, label, *args
 
     logging.info('num_input_pipelines: %d', input_context.num_input_pipelines)
     dataset = builder.as_dataset(

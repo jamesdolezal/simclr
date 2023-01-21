@@ -22,14 +22,14 @@ import os
 from absl import app
 from absl import flags
 from slideflow import log as logging
-import data as data_lib
-import metrics
-import model as model_lib
-import objective as obj_lib
+from . import data as data_lib
+from . import metrics
+from . import model as model_lib
+from . import objective as obj_lib
+from .data_util import FLAGS
+
 import tensorflow.compat.v2 as tf
 import tensorflow_datasets as tfds
-
-from data_util import FLAGS
 
 
 flags.DEFINE_float(
@@ -282,14 +282,21 @@ def build_saved_model(model, include_projection_head=True):
   return module
 
 
-def save(model, global_step):
+def save(model, global_step, nested_by_step=False):
   """Export as SavedModel for finetuning and inference."""
   saved_model = build_saved_model(model)
   export_dir = os.path.join(FLAGS.model_dir, 'saved_model')
-  checkpoint_export_dir = os.path.join(export_dir, str(global_step))
+  if nested_by_step:
+    checkpoint_export_dir = os.path.join(export_dir, str(global_step))
+  else:
+    checkpoint_export_dir = export_dir
   if tf.io.gfile.exists(checkpoint_export_dir):
     tf.io.gfile.rmtree(checkpoint_export_dir)
   tf.saved_model.save(saved_model, checkpoint_export_dir)
+
+  # Write flags to model folder.
+  with open(os.path.join(export_dir, 'flags.json'), "w") as data_file:
+    json.dump(dict(FLAGS), data_file, indent=1)
 
   if FLAGS.keep_hub_module_max > 0:
     # Delete old exported SavedModels.
@@ -301,6 +308,11 @@ def save(model, global_step):
     exported_steps.sort()
     for step_to_delete in exported_steps[:-FLAGS.keep_hub_module_max]:
       tf.io.gfile.rmtree(os.path.join(export_dir, str(step_to_delete)))
+
+
+def load(model):
+    """Load a SavedModel for finetuning and inference."""
+    return tf.saved_model.load(model)
 
 
 def try_restore_from_checkpoint(model, global_step, optimizer):
@@ -425,7 +437,7 @@ def perform_evaluation(model, builder, eval_steps, ckpt, strategy, topology):
     json.dump(serializable_flags, f)
 
   # Export as SavedModel for finetuning and inference.
-  save(model, global_step=result['global_step'])
+  save(model, global_step=result['global_step'], nested_by_step=True)
 
   return result
 
@@ -461,7 +473,7 @@ def _restore_latest_or_from_pretrain(checkpoint_manager):
         x.assign(tf.zeros_like(x))
 
 
-def run(builder=None, flags=None):
+def run_simclr(builder=None, flags=None):
   # Temporary workaround for command-line flags
   for f in flags:
     FLAGS[f] = flags[f]
@@ -507,7 +519,7 @@ def run(builder=None, flags=None):
                  strategy.num_replicas_in_sync)
 
   with strategy.scope():
-    model = model_lib.Model(num_classes)
+    model = model_lib.SimCLR(num_classes)
 
   if FLAGS.mode == 'eval':
     for ckpt in tf.train.checkpoints_iterator(
@@ -661,6 +673,9 @@ def run(builder=None, flags=None):
       perform_evaluation(model, builder, eval_steps,
                          checkpoint_manager.latest_checkpoint, strategy,
                          topology)
+    else:
+      # Export as SavedModel for finetuning and inference.
+      save(model, global_step=global_step)
 
 
 def main(argv):
@@ -669,7 +684,7 @@ def main(argv):
     FLAGS[f] = flags.FLAGS[f].value
   if len(argv) > 1:
     raise app.UsageError('Too many command-line arguments.')
-  run()
+  run_simclr()
 
 if __name__ == '__main__':
   tf.compat.v1.enable_v2_behavior()
