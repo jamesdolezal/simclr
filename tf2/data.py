@@ -26,7 +26,9 @@ import tensorflow_datasets as tfds
 
 class SlideflowBuilder:
 
-    def __init__(self, train_dts=None, val_dts=None, test_dts=None, labels=None, num_classes=None, val_kwargs=None, dataset_kwargs=None):
+    def __init__(self, train_dts=None, val_dts=None, test_dts=None, labels=None,
+                 num_classes=None, val_kwargs=None, steps_per_epoch_override=None,
+                 dataset_kwargs=None):
         """Build a training/validet."""
         if train_dts is None and val_dts is None and test_dts is None:
             raise ValueError("Must supply either train_dts, val_dts, or test_dts.")
@@ -47,21 +49,25 @@ class SlideflowBuilder:
             self.train_dts = train_dts
             self.val_dts = val_dts
             self.test_dts = test_dts
-
+        if steps_per_epoch_override:
+            train_tiles = steps_per_epoch_override
+        elif self.train_dts:
+            train_tiles = self.train_dts.num_tiles
+        else:
+            train_tiles = 0
         self.dataset_kwargs = dict() if dataset_kwargs is None else dataset_kwargs
         self.info = data_util.EasyDict(
             features=data_util.EasyDict(
                 label=data_util.EasyDict(num_classes=num_classes)
             ),
             splits=data_util.EasyDict(
-                train=data_util.EasyDict(num_examples=(0 if not self.train_dts else self.train_dts.num_tiles)),
+                train=data_util.EasyDict(num_examples=train_tiles),
                 validation=data_util.EasyDict(num_examples=(0 if not self.val_dts else self.val_dts.num_tiles)),
                 test=data_util.EasyDict(num_examples=(0 if not self.test_dts else self.test_dts.num_tiles))
             ))
 
     def as_dataset(self, split, read_config, shuffle_files, as_supervised):
         logging.info(f"Dataset split requested: {split}")
-        if split == 'validation': split = 'test'
         if split == 'train':
             dts = self.train_dts
         elif split == 'validation':
@@ -72,7 +78,7 @@ class SlideflowBuilder:
             raise ValueError(f"Unrecognized split {split}, expected 'train' "
                              "'validation', or 'test'.")
         if dts is None:
-            raise ValueError(f"Builder not configured for phase {split}.")
+            raise ValueError(f'Builder not configured for phase "{split}".')
 
         return dts.tensorflow(
             labels=self.labels,
@@ -80,7 +86,7 @@ class SlideflowBuilder:
             shard_idx=read_config.input_context.input_pipeline_id,
             deterministic=True,
             standardize=False,
-            infinite=(split != 'test'),
+            infinite=(split == 'train'),
             **self.dataset_kwargs
         )
 

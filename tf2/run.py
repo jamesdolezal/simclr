@@ -282,10 +282,10 @@ def build_saved_model(model, include_projection_head=True):
   return module
 
 
-def save(model, global_step, nested_by_step=False):
+def save(model, global_step, dest=None, nested_by_step=False):
   """Export as SavedModel for finetuning and inference."""
   saved_model = build_saved_model(model)
-  export_dir = os.path.join(FLAGS.model_dir, 'saved_model')
+  export_dir = dest if dest else os.path.join(FLAGS.model_dir, 'saved_model')
   if nested_by_step:
     checkpoint_export_dir = os.path.join(export_dir, str(global_step))
   else:
@@ -345,6 +345,17 @@ def try_restore_from_checkpoint(model, global_step, optimizer):
         x.assign(tf.zeros_like(x))
 
   return checkpoint_manager
+
+
+def checkpoint_to_saved_model(ckpt, num_logits, dest, global_step=0):
+    from .model import SimCLR
+    model = SimCLR(num_logits)
+    checkpoint = tf.train.Checkpoint(
+        model=model,
+        global_step=tf.Variable(0, dtype=tf.int64)
+    )
+    checkpoint.restore(ckpt).expect_partial()
+    save(model, dest=dest, global_step=global_step)
 
 
 def json_serializable(val):
