@@ -26,214 +26,9 @@ from . import data as data_lib
 from . import metrics
 from . import model as model_lib
 from . import objective as obj_lib
-from .data_util import FLAGS
 
 import tensorflow.compat.v2 as tf
 import tensorflow_datasets as tfds
-
-
-flags.DEFINE_float(
-    'learning_rate', 0.3,
-    'Initial learning rate per batch size of 256.')
-
-flags.DEFINE_enum(
-    'learning_rate_scaling', 'linear', ['linear', 'sqrt'],
-    'How to scale the learning rate as a function of batch size.')
-
-flags.DEFINE_float(
-    'warmup_epochs', 10,
-    'Number of epochs of warmup.')
-
-flags.DEFINE_float('weight_decay', 1e-6, 'Amount of weight decay to use.')
-
-flags.DEFINE_float(
-    'batch_norm_decay', 0.9,
-    'Batch norm decay parameter.')
-
-flags.DEFINE_integer(
-    'train_batch_size', 512,
-    'Batch size for training.')
-
-flags.DEFINE_string(
-    'train_split', 'train',
-    'Split for training.')
-
-flags.DEFINE_integer(
-    'train_epochs', 100,
-    'Number of epochs to train for.')
-
-flags.DEFINE_integer(
-    'train_steps', 0,
-    'Number of steps to train for. If provided, overrides train_epochs.')
-
-flags.DEFINE_integer(
-    'eval_steps', 0,
-    'Number of steps to eval for. If not provided, evals over entire dataset.')
-
-flags.DEFINE_integer(
-    'eval_batch_size', 256,
-    'Batch size for eval.')
-
-flags.DEFINE_integer(
-    'checkpoint_epochs', 1,
-    'Number of epochs between checkpoints/summaries.')
-
-flags.DEFINE_integer(
-    'checkpoint_steps', 0,
-    'Number of steps between checkpoints/summaries. If provided, overrides '
-    'checkpoint_epochs.')
-
-flags.DEFINE_string(
-    'eval_split', 'validation',
-    'Split for evaluation.')
-
-flags.DEFINE_string(
-    'dataset', 'imagenet2012',
-    'Name of a dataset.')
-
-flags.DEFINE_bool(
-    'cache_dataset', False,
-    'Whether to cache the entire dataset in memory. If the dataset is '
-    'ImageNet, this is a very bad idea, but for smaller datasets it can '
-    'improve performance.')
-
-flags.DEFINE_enum(
-    'mode', 'train', ['train', 'eval', 'train_then_eval'],
-    'Whether to perform training or evaluation.')
-
-flags.DEFINE_enum(
-    'train_mode', 'pretrain', ['pretrain', 'finetune'],
-    'The train mode controls different objectives and trainable components.')
-
-flags.DEFINE_bool('lineareval_while_pretraining', True,
-                  'Whether to finetune supervised head while pretraining.')
-
-flags.DEFINE_string(
-    'checkpoint', None,
-    'Loading from the given checkpoint for fine-tuning if a finetuning '
-    'checkpoint does not already exist in model_dir.')
-
-flags.DEFINE_bool(
-    'zero_init_logits_layer', False,
-    'If True, zero initialize layers after avg_pool for supervised learning.')
-
-flags.DEFINE_integer(
-    'fine_tune_after_block', -1,
-    'The layers after which block that we will fine-tune. -1 means fine-tuning '
-    'everything. 0 means fine-tuning after stem block. 4 means fine-tuning '
-    'just the linear head.')
-
-flags.DEFINE_string(
-    'master', None,
-    'Address/name of the TensorFlow master to use. By default, use an '
-    'in-process master.')
-
-flags.DEFINE_string(
-    'model_dir', None,
-    'Model directory for training.')
-
-flags.DEFINE_string(
-    'data_dir', None,
-    'Directory where dataset is stored.')
-
-flags.DEFINE_bool(
-    'use_tpu', True,
-    'Whether to run on TPU.')
-
-flags.DEFINE_string(
-    'tpu_name', None,
-    'The Cloud TPU to use for training. This should be either the name '
-    'used when creating the Cloud TPU, or a grpc://ip.address.of.tpu:8470 '
-    'url.')
-
-flags.DEFINE_string(
-    'tpu_zone', None,
-    '[Optional] GCE zone where the Cloud TPU is located in. If not '
-    'specified, we will attempt to automatically detect the GCE project from '
-    'metadata.')
-
-flags.DEFINE_string(
-    'gcp_project', None,
-    '[Optional] Project name for the Cloud TPU-enabled project. If not '
-    'specified, we will attempt to automatically detect the GCE project from '
-    'metadata.')
-
-flags.DEFINE_enum(
-    'optimizer', 'lars', ['momentum', 'adam', 'lars'],
-    'Optimizer to use.')
-
-flags.DEFINE_float(
-    'momentum', 0.9,
-    'Momentum parameter.')
-
-flags.DEFINE_string(
-    'eval_name', None,
-    'Name for eval.')
-
-flags.DEFINE_integer(
-    'keep_checkpoint_max', 5,
-    'Maximum number of checkpoints to keep.')
-
-flags.DEFINE_integer(
-    'keep_hub_module_max', 1,
-    'Maximum number of Hub modules to keep.')
-
-flags.DEFINE_float(
-    'temperature', 0.1,
-    'Temperature parameter for contrastive loss.')
-
-flags.DEFINE_boolean(
-    'hidden_norm', True,
-    'Temperature parameter for contrastive loss.')
-
-flags.DEFINE_enum(
-    'proj_head_mode', 'nonlinear', ['none', 'linear', 'nonlinear'],
-    'How the head projection is done.')
-
-flags.DEFINE_integer(
-    'proj_out_dim', 128,
-    'Number of head projection dimension.')
-
-flags.DEFINE_integer(
-    'num_proj_layers', 3,
-    'Number of non-linear head layers.')
-
-flags.DEFINE_integer(
-    'ft_proj_selector', 0,
-    'Which layer of the projection head to use during fine-tuning. '
-    '0 means no projection head, and -1 means the final layer.')
-
-flags.DEFINE_boolean(
-    'global_bn', True,
-    'Whether to aggregate BN statistics across distributed cores.')
-
-flags.DEFINE_integer(
-    'width_multiplier', 1,
-    'Multiplier to change width of network.')
-
-flags.DEFINE_integer(
-    'resnet_depth', 50,
-    'Depth of ResNet.')
-
-flags.DEFINE_float(
-    'sk_ratio', 0.,
-    'If it is bigger than 0, it will enable SK. Recommendation: 0.0625.')
-
-flags.DEFINE_float(
-    'se_ratio', 0.,
-    'If it is bigger than 0, it will enable SE.')
-
-flags.DEFINE_integer(
-    'image_size', 224,
-    'Input image size.')
-
-flags.DEFINE_float(
-    'color_jitter_strength', 1.0,
-    'The strength of color jittering.')
-
-flags.DEFINE_boolean(
-    'use_blur', True,
-    'Whether or not to use Gaussian blur for augmentation during pretraining.')
 
 
 def get_salient_tensors_dict(include_projection_head):
@@ -282,10 +77,10 @@ def build_saved_model(model, include_projection_head=True):
   return module
 
 
-def save(model, global_step, dest=None, nested_by_step=False):
+def save(model, args, model_dir, global_step, dest=None, nested_by_step=False):
   """Export as SavedModel for finetuning and inference."""
   saved_model = build_saved_model(model)
-  export_dir = dest if dest else os.path.join(FLAGS.model_dir, 'saved_model')
+  export_dir = dest if dest else os.path.join(model_dir, 'saved_model')
   if nested_by_step:
     checkpoint_export_dir = os.path.join(export_dir, str(global_step))
   else:
@@ -296,9 +91,11 @@ def save(model, global_step, dest=None, nested_by_step=False):
 
   # Write flags to model folder.
   with open(os.path.join(export_dir, 'flags.json'), "w") as data_file:
-    json.dump(dict(FLAGS), data_file, indent=1)
+    dump_dict = vars(args)
+    dump_dict['model_dir'] = model_dir
+    json.dump(dump_dict, data_file, indent=1)
 
-  if FLAGS.keep_hub_module_max > 0:
+  if args.keep_hub_module_max > 0:
     # Delete old exported SavedModels.
     exported_steps = []
     for subdir in tf.io.gfile.listdir(export_dir):
@@ -306,7 +103,7 @@ def save(model, global_step, dest=None, nested_by_step=False):
         continue
       exported_steps.append(int(subdir))
     exported_steps.sort()
-    for step_to_delete in exported_steps[:-FLAGS.keep_hub_module_max]:
+    for step_to_delete in exported_steps[:-args.keep_hub_module_max]:
       tf.io.gfile.rmtree(os.path.join(export_dir, str(step_to_delete)))
 
 
@@ -315,28 +112,35 @@ def load(model):
     return tf.saved_model.load(model)
 
 
-def try_restore_from_checkpoint(model, global_step, optimizer):
-  """Restores the latest ckpt if it exists, otherwise check FLAGS.checkpoint."""
+def try_restore_from_checkpoint(
+    model,
+    global_step,
+    optimizer,
+    model_dir,
+    checkpoint_path,
+    args
+  ):
+  """Restores the latest ckpt if it exists, otherwise check checkpoint_path"""
   checkpoint = tf.train.Checkpoint(
       model=model, global_step=global_step, optimizer=optimizer)
   checkpoint_manager = tf.train.CheckpointManager(
       checkpoint,
-      directory=FLAGS.model_dir,
-      max_to_keep=FLAGS.keep_checkpoint_max)
+      directory=model_dir,
+      max_to_keep=args.keep_checkpoint_max)
   latest_ckpt = checkpoint_manager.latest_checkpoint
   if latest_ckpt:
     # Restore model weights, global step, optimizer states
     logging.info('Restoring from latest checkpoint: %s', latest_ckpt)
     checkpoint_manager.checkpoint.restore(latest_ckpt).expect_partial()
-  elif FLAGS.checkpoint:
+  elif checkpoint_path:
     # Restore model weights only, but not global step and optimizer states
-    logging.info('Restoring from given checkpoint: %s', FLAGS.checkpoint)
+    logging.info('Restoring from given checkpoint: %s', checkpoint_path)
     checkpoint_manager2 = tf.train.CheckpointManager(
         tf.train.Checkpoint(model=model),
-        directory=FLAGS.model_dir,
-        max_to_keep=FLAGS.keep_checkpoint_max)
-    checkpoint_manager2.checkpoint.restore(FLAGS.checkpoint).expect_partial()
-    if FLAGS.zero_init_logits_layer:
+        directory=model_dir,
+        max_to_keep=args.keep_checkpoint_max)
+    checkpoint_manager2.checkpoint.restore(checkpoint_path).expect_partial()
+    if args.zero_init_logits_layer:
       model = checkpoint_manager2.checkpoint.model
       output_layer_parameters = model.supervised_head.trainable_weights
       logging.info('Initializing output layer parameters %s to zero',
@@ -347,15 +151,17 @@ def try_restore_from_checkpoint(model, global_step, optimizer):
   return checkpoint_manager
 
 
-def checkpoint_to_saved_model(ckpt, num_logits, dest, global_step=0):
+def checkpoint_to_saved_model(ckpt, args, model_dir, num_logits, dest, global_step=0):
+    # FIXME:M `args, model_dir` where added to the arguments but I don't see 
+    #         where this function is used
     from .model import SimCLR
-    model = SimCLR(num_logits)
+    model = SimCLR(num_logits, args)
     checkpoint = tf.train.Checkpoint(
         model=model,
         global_step=tf.Variable(0, dtype=tf.int64)
     )
     checkpoint.restore(ckpt).expect_partial()
-    save(model, dest=dest, global_step=global_step)
+    save(model, args, model_dir, dest=dest, global_step=global_step)
 
 
 def json_serializable(val):
@@ -366,15 +172,25 @@ def json_serializable(val):
     return False
 
 
-def perform_evaluation(model, builder, eval_steps, ckpt, strategy, topology):
+def perform_evaluation(
+  model, 
+  builder,
+  eval_steps, 
+  ckpt,
+  strategy,
+  topology,
+  model_dir, 
+  cache_dataset,
+  args, 
+):
   """Perform evaluation."""
-  if FLAGS.train_mode == 'pretrain' and not FLAGS.lineareval_while_pretraining:
+  if args.train_mode == 'pretrain' and not args.lineareval_while_pretraining:
     logging.info('Skipping eval during pretraining without linear eval.')
     return
   # Build input pipeline.
-  ds = data_lib.build_distributed_dataset(builder, FLAGS.eval_batch_size, False,
-                                          strategy, topology)
-  summary_writer = tf.summary.create_file_writer(FLAGS.model_dir)
+  ds = data_lib.build_distributed_dataset(builder, args.eval_batch_size, False,
+                                          strategy, topology, args, cache_dataset=cache_dataset)
+  summary_writer = tf.summary.create_file_writer(model_dir)
 
   # Build metrics.
   with strategy.scope():
@@ -402,7 +218,7 @@ def perform_evaluation(model, builder, eval_steps, ckpt, strategy, topology):
     l = labels['labels']
     metrics.update_finetune_metrics_eval(label_top_1_accuracy,
                                          label_top_5_accuracy, outputs, l)
-    reg_loss = model_lib.add_weight_decay(model, adjust_per_optimizer=True)
+    reg_loss = model_lib.add_weight_decay(model, args, adjust_per_optimizer=True)
     regularization_loss.update_state(reg_loss)
 
   with strategy.scope():
@@ -427,20 +243,21 @@ def perform_evaluation(model, builder, eval_steps, ckpt, strategy, topology):
     summary_writer.flush()
 
   # Record results as JSON.
-  result_json_path = os.path.join(FLAGS.model_dir, 'result.json')
+  result_json_path = os.path.join(model_dir, 'result.json')
   result = {metric.name: metric.result().numpy() for metric in all_metrics}
   result['global_step'] = global_step.numpy()
   logging.info(result)
   with tf.io.gfile.GFile(result_json_path, 'w') as f:
     json.dump({k: float(v) for k, v in result.items()}, f)
   result_json_path = os.path.join(
-      FLAGS.model_dir, 'result_%d.json'%result['global_step'])
+      model_dir, 'result_%d.json'%result['global_step'])
   with tf.io.gfile.GFile(result_json_path, 'w') as f:
     json.dump({k: float(v) for k, v in result.items()}, f)
-  flag_json_path = os.path.join(FLAGS.model_dir, 'flags.json')
+  flag_json_path = os.path.join(model_dir, 'flags.json')
   with tf.io.gfile.GFile(flag_json_path, 'w') as f:
     serializable_flags = {}
-    for key, val in FLAGS.flag_values_dict().items():
+
+    for key, val in vars(args).items():
       # Some flag value types e.g. datetime.timedelta are not json serializable,
       # filter those out.
       if json_serializable(val):
@@ -448,15 +265,15 @@ def perform_evaluation(model, builder, eval_steps, ckpt, strategy, topology):
     json.dump(serializable_flags, f)
 
   # Export as SavedModel for finetuning and inference.
-  save(model, global_step=result['global_step'], nested_by_step=True)
+  save(model, args, model_dir, global_step=result['global_step'], nested_by_step=True)
 
   return result
 
 
-def _restore_latest_or_from_pretrain(checkpoint_manager):
+def _restore_latest_or_from_pretrain(checkpoint_manager, args, checkpoint_path):
   """Restores the latest ckpt if training already.
 
-  Or restores from FLAGS.checkpoint if in finetune mode.
+  Or restores from checkpoint_path if in finetune mode.
 
   Args:
     checkpoint_manager: tf.traiin.CheckpointManager.
@@ -468,14 +285,14 @@ def _restore_latest_or_from_pretrain(checkpoint_manager):
     # in that case we specify `expect_partial`.
     logging.info('Restoring from %s', latest_ckpt)
     checkpoint_manager.checkpoint.restore(latest_ckpt).expect_partial()
-  elif FLAGS.train_mode == 'finetune':
+  elif args.train_mode == 'finetune':
     # Restore from pretrain checkpoint.
-    assert FLAGS.checkpoint, 'Missing pretrain checkpoint.'
-    logging.info('Restoring from %s', FLAGS.checkpoint)
-    checkpoint_manager.checkpoint.restore(FLAGS.checkpoint).expect_partial()
+    assert checkpoint_path, 'Missing pretrain checkpoint.'
+    logging.info('Restoring from %s', checkpoint_path)
+    checkpoint_manager.checkpoint.restore(checkpoint_path).expect_partial()
     # TODO(iamtingchen): Can we instead use a zeros initializer for the
     # supervised head?
-    if FLAGS.zero_init_logits_layer:
+    if args.zero_init_logits_layer:
       model = checkpoint_manager.checkpoint.model
       output_layer_parameters = model.supervised_head.trainable_weights
       logging.info('Initializing output layer parameters %s to zero',
@@ -484,22 +301,56 @@ def _restore_latest_or_from_pretrain(checkpoint_manager):
         x.assign(tf.zeros_like(x))
 
 
-def run_simclr(builder=None, flags=None):
-  # Temporary workaround for command-line flags
-  for f in flags:
-    FLAGS[f] = flags[f]
+def run_simclr(
+  args,
+  builder=None,
+  
+  model_dir=None,
+  cache_dataset=False,
+  checkpoint_path=None,
+  use_tpu=False,
+  tpu_name=None,
+  tpu_zone=None,
+  gcp_project=None,
+):
+  """Train SimCLR model
+
+  Args:
+    simCLR_args (SimpleNamespace): SimCLR arguments, as provided by
+      :func:`slideflow.simclr.get_args`.
+    builder : FIXME:M take care of these once we better define SlideflowBuilder
+
+    model_dir (str): Model directory for training.
+    cache_dataset (bool): Whether to cache the entire dataset in memory. If 
+      the dataset is ImageNet, this is a very bad idea, but for smaller datasets
+      it can improve performance
+    checkpoint_path (str): Loading from the given checkpoint for fine-tuning if 
+      a finetuning checkpoint does not already exist in model_dir
+    use_tpu (bool): Whether to run on TPU.
+    tpu_name (str): The Cloud TPU to use for training. This should be either the
+      name used when creating the Cloud TPU, or a grpc://ip.address.of.tpu:8470 
+      url
+    tpu_zone (str): GCE zone where the Cloud TPU is located in. If not 
+      specified, we will attempt to automatically detect the GCE project from 
+      metadata
+    gcp_project (str): Project name for the Cloud TPU-enabled project. If not 
+      specified, we will attempt to automatically detect the GCE project from 
+      metadata
+    
+  """
 
   if builder is None:
-    builder = tfds.builder(FLAGS.dataset, data_dir=FLAGS.data_dir)
+    builder = tfds.builder(args.dataset, data_dir=args.data_dir)
     builder.download_and_prepare()
-  num_train_examples = builder.info.splits[FLAGS.train_split].num_examples
-  num_eval_examples = builder.info.splits[FLAGS.eval_split].num_examples
+  num_train_examples = builder.info.splits[args.train_split].num_examples
+  num_eval_examples = builder.info.splits[args.eval_split].num_examples
   num_classes = builder.info.features['label'].num_classes
 
-  train_steps = model_lib.get_train_steps(num_train_examples)
-  eval_steps = FLAGS.eval_steps or int(
-      math.ceil(num_eval_examples / FLAGS.eval_batch_size))
-  epoch_steps = int(round(num_train_examples / FLAGS.train_batch_size))
+  train_steps = model_lib.get_train_steps(num_train_examples, args.train_steps,
+    args.train_epochs, args.train_batch_size)
+  eval_steps = args.eval_steps or int(
+      math.ceil(num_eval_examples / args.eval_batch_size))
+  epoch_steps = int(round(num_train_examples / args.train_batch_size))
 
   logging.info('# train examples: %d', num_train_examples)
   logging.info('# train_steps: %d', train_steps)
@@ -507,15 +358,15 @@ def run_simclr(builder=None, flags=None):
   logging.info('# eval steps: %d', eval_steps)
 
   checkpoint_steps = (
-      FLAGS.checkpoint_steps or (FLAGS.checkpoint_epochs * epoch_steps))
+      args.checkpoint_steps or (args.checkpoint_epochs * epoch_steps))
 
   topology = None
-  if FLAGS.use_tpu:
-    if FLAGS.tpu_name:
+  if use_tpu:
+    if tpu_name:
       cluster = tf.distribute.cluster_resolver.TPUClusterResolver(
-          FLAGS.tpu_name, zone=FLAGS.tpu_zone, project=FLAGS.gcp_project)
+          tpu_name, zone=tpu_zone, project=gcp_project)
     else:
-      cluster = tf.distribute.cluster_resolver.TPUClusterResolver(FLAGS.master)
+      cluster = tf.distribute.cluster_resolver.TPUClusterResolver(args.master)
     tf.config.experimental_connect_to_cluster(cluster)
     topology = tf.tpu.experimental.initialize_tpu_system(cluster)
     logging.info('Topology:')
@@ -530,34 +381,36 @@ def run_simclr(builder=None, flags=None):
                  strategy.num_replicas_in_sync)
 
   with strategy.scope():
-    model = model_lib.SimCLR(num_classes)
+    model = model_lib.SimCLR(num_classes, args=args)
 
-  if FLAGS.mode == 'eval':
+  if args.mode == 'eval':
     for ckpt in tf.train.checkpoints_iterator(
-        FLAGS.model_dir, min_interval_secs=15):
-      result = perform_evaluation(model, builder, eval_steps, ckpt, strategy,
-                                  topology)
+        model_dir, min_interval_secs=15):
+      result = perform_evaluation(
+        model, builder, eval_steps, ckpt, strategy, topology,  model_dir, 
+        cache_dataset, args
+      )
       if result['global_step'] >= train_steps:
         logging.info('Eval complete. Exiting...')
         return
   else:
-    summary_writer = tf.summary.create_file_writer(FLAGS.model_dir)
+    summary_writer = tf.summary.create_file_writer(model_dir)
     with strategy.scope():
       # Build input pipeline.
-      ds = data_lib.build_distributed_dataset(builder, FLAGS.train_batch_size,
-                                              True, strategy, topology)
+      ds = data_lib.build_distributed_dataset(builder, args.train_batch_size,
+                                              True, strategy, topology, args)
 
       # Build LR schedule and optimizer.
-      learning_rate = model_lib.WarmUpAndCosineDecay(FLAGS.learning_rate,
+      learning_rate = model_lib.WarmUpAndCosineDecay(args,
                                                      num_train_examples)
-      optimizer = model_lib.build_optimizer(learning_rate)
+      optimizer = model_lib.build_optimizer(learning_rate, args)
 
       # Build metrics.
       all_metrics = []  # For summaries.
       weight_decay_metric = tf.keras.metrics.Mean('train/weight_decay')
       total_loss_metric = tf.keras.metrics.Mean('train/total_loss')
       all_metrics.extend([weight_decay_metric, total_loss_metric])
-      if FLAGS.train_mode == 'pretrain':
+      if args.train_mode == 'pretrain':
         contrast_loss_metric = tf.keras.metrics.Mean('train/contrast_loss')
         contrast_acc_metric = tf.keras.metrics.Mean('train/contrast_acc')
         contrast_entropy_metric = tf.keras.metrics.Mean(
@@ -565,14 +418,14 @@ def run_simclr(builder=None, flags=None):
         all_metrics.extend([
             contrast_loss_metric, contrast_acc_metric, contrast_entropy_metric
         ])
-      if FLAGS.train_mode == 'finetune' or FLAGS.lineareval_while_pretraining:
+      if args.train_mode == 'finetune' or args.lineareval_while_pretraining:
         supervised_loss_metric = tf.keras.metrics.Mean('train/supervised_loss')
         supervised_acc_metric = tf.keras.metrics.Mean('train/supervised_acc')
         all_metrics.extend([supervised_loss_metric, supervised_acc_metric])
 
       # Restore checkpoint if available.
       checkpoint_manager = try_restore_from_checkpoint(
-          model, optimizer.iterations, optimizer)
+          model, optimizer.iterations, optimizer, model_dir, checkpoint_path, args)
 
     steps_per_loop = checkpoint_steps
 
@@ -603,8 +456,8 @@ def run_simclr(builder=None, flags=None):
           outputs = projection_head_outputs
           con_loss, logits_con, labels_con = obj_lib.add_contrastive_loss(
               outputs,
-              hidden_norm=FLAGS.hidden_norm,
-              temperature=FLAGS.temperature,
+              hidden_norm=args.hidden_norm,
+              temperature=args.temperature,
               strategy=strategy)
           if loss is None:
             loss = con_loss
@@ -618,7 +471,7 @@ def run_simclr(builder=None, flags=None):
         if supervised_head_outputs is not None:
           outputs = supervised_head_outputs
           l = labels['labels']
-          if FLAGS.train_mode == 'pretrain' and FLAGS.lineareval_while_pretraining:
+          if args.train_mode == 'pretrain' and args.lineareval_while_pretraining:
             l = tf.concat([l, l], 0)
           sup_loss = obj_lib.add_supervised_loss(labels=l, logits=outputs)
           if loss is None:
@@ -629,7 +482,7 @@ def run_simclr(builder=None, flags=None):
                                                 supervised_acc_metric, sup_loss,
                                                 l, outputs)
         weight_decay = model_lib.add_weight_decay(
-            model, adjust_per_optimizer=True)
+            model, args, adjust_per_optimizer=True)
         weight_decay_metric.update_state(weight_decay)
         loss += weight_decay
         total_loss_metric.update_state(loss)
@@ -637,9 +490,9 @@ def run_simclr(builder=None, flags=None):
         # replicas so we divide the loss by the number of replicas so that the
         # mean gradient is applied.
         loss = loss / strategy.num_replicas_in_sync
-        logging.info('Trainable variables:')
+        logging.debug('Trainable variables:')
         for var in model.trainable_variables:
-          logging.info(var.name)
+          logging.debug(var.name)
         grads = tape.gradient(loss, model.trainable_variables)
         optimizer.apply_gradients(zip(grads, model.trainable_variables))
 
@@ -680,19 +533,16 @@ def run_simclr(builder=None, flags=None):
           metric.reset_states()
       logging.info('Training complete...')
 
-    if FLAGS.mode == 'train_then_eval':
+    if args.mode == 'train_then_eval':
       perform_evaluation(model, builder, eval_steps,
                          checkpoint_manager.latest_checkpoint, strategy,
-                         topology)
+                         topology, model_dir, cache_dataset, args)
     else:
       # Export as SavedModel for finetuning and inference.
-      save(model, global_step=global_step)
+      save(model, args, model_dir, global_step=global_step)
 
 
-def main(argv):
-  # Temporary workaround for command-line flags
-  for f in flags.FLAGS:
-    FLAGS[f] = flags.FLAGS[f].value
+def main(argv): # FIXME:M do we get rid of this?
   if len(argv) > 1:
     raise app.UsageError('Too many command-line arguments.')
   run_simclr()

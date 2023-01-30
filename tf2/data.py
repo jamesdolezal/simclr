@@ -19,7 +19,6 @@ import functools
 from slideflow import log as logging
 
 from . import data_util
-from .data_util import FLAGS
 import tensorflow.compat.v2 as tf
 import tensorflow_datasets as tfds
 
@@ -91,7 +90,8 @@ class SlideflowBuilder:
         )
 
 
-def build_input_fn(builder, global_batch_size, topology, is_training):
+def build_input_fn(builder, global_batch_size, topology, is_training, 
+  simCLR_args, cache_dataset=False):
   """Build input function.
 
   Args:
@@ -99,6 +99,7 @@ def build_input_fn(builder, global_batch_size, topology, is_training):
     global_batch_size: Global batch size.
     topology: An instance of `tf.tpu.experimental.Topology` or None.
     is_training: Whether to build in training mode.
+    simCLR_args:  SimCLR arguments, as provided by :func:`slideflow.simclr.get_args`.
 
   Returns:
     A function that accepts a dict of params and returns a tuple of images and
@@ -110,13 +111,15 @@ def build_input_fn(builder, global_batch_size, topology, is_training):
     batch_size = input_context.get_per_replica_batch_size(global_batch_size)
     logging.info('Global batch size: %d', global_batch_size)
     logging.info('Per-replica batch size: %d', batch_size)
-    preprocess_fn_pretrain = get_preprocess_fn(is_training, is_pretrain=True)
-    preprocess_fn_finetune = get_preprocess_fn(is_training, is_pretrain=False)
+    preprocess_fn_pretrain = get_preprocess_fn(
+      is_training, is_pretrain=True, args=simCLR_args)
+    preprocess_fn_finetune = get_preprocess_fn(
+      is_training, is_pretrain=False, args=simCLR_args)
     num_classes = builder.info.features['label'].num_classes
 
     def map_fn(image, label, *args):
       """Produces multiple transformations of the same batch."""
-      if is_training and FLAGS.train_mode == 'pretrain':
+      if is_training and simCLR_args.train_mode == 'pretrain':
         xs = []
         for _ in range(2):  # Two transformations
           xs.append(preprocess_fn_pretrain(image))
@@ -129,7 +132,7 @@ def build_input_fn(builder, global_batch_size, topology, is_training):
 
     logging.info('num_input_pipelines: %d', input_context.num_input_pipelines)
     dataset = builder.as_dataset(
-        split=FLAGS.train_split if is_training else FLAGS.eval_split,
+        split=simCLR_args.train_split if is_training else simCLR_args.eval_split,
         shuffle_files=is_training,
         as_supervised=True,
         # Passing the input_context to TFDS makes TFDS read different parts
@@ -139,14 +142,14 @@ def build_input_fn(builder, global_batch_size, topology, is_training):
             interleave_cycle_length=32,
             interleave_block_length=1,
             input_context=input_context))
-    if FLAGS.cache_dataset:
+    if cache_dataset:
       dataset = dataset.cache()
     if is_training:
       options = tf.data.Options()
       options.experimental_deterministic = False
       options.experimental_slack = True
       dataset = dataset.with_options(options)
-      buffer_multiplier = 50 if FLAGS.image_size <= 32 else 10
+      buffer_multiplier = 50 if simCLR_args.image_size <= 32 else 10
       dataset = dataset.shuffle(batch_size * buffer_multiplier)
       dataset = dataset.repeat(-1)
     dataset = dataset.map(
@@ -159,22 +162,23 @@ def build_input_fn(builder, global_batch_size, topology, is_training):
 
 
 def build_distributed_dataset(builder, batch_size, is_training, strategy,
-                              topology):
-  input_fn = build_input_fn(builder, batch_size, topology, is_training)
+                              topology, args, cache_dataset=False):
+  input_fn = build_input_fn(builder, batch_size, topology, is_training, args, cache_dataset=cache_dataset)
   return strategy.distribute_datasets_from_function(input_fn)
 
 
-def get_preprocess_fn(is_training, is_pretrain):
+def get_preprocess_fn(is_training, is_pretrain, args):
   """Get function that accepts an image and returns a preprocessed image."""
   # Disable test cropping for small images (e.g. CIFAR)
-  if FLAGS.image_size <= 32:
+  if args.image_size <= 32:
     test_crop = False
   else:
     test_crop = True
   return functools.partial(
       data_util.preprocess_image,
-      height=FLAGS.image_size,
-      width=FLAGS.image_size,
+      height=args.image_size,
+      width=args.image_size,
+      args=args,
       is_training=is_training,
       color_distort=is_pretrain,
       test_crop=test_crop)
