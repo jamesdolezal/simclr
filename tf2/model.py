@@ -277,6 +277,7 @@ class SimCLR(tf.keras.models.Model):
     self.resnet_model = resnet.resnet(
         train_mode=train_mode,
         width_multiplier=width_multiplier,
+        resnet_depth=resnet_depth,
         cifar_stem=image_size <= 32,
         sk_ratio=sk_ratio,
         se_ratio=se_ratio,
@@ -289,13 +290,14 @@ class SimCLR(tf.keras.models.Model):
       num_proj_layers=num_proj_layers,
       ft_proj_selector=ft_proj_selector
     )
-    if train_mode == 'finetune' or lineareval_while_pretraining:
+    if ((train_mode == 'finetune' or lineareval_while_pretraining) and num_classes):
       self.supervised_head = SupervisedHead(num_classes)
     self.train_mode = train_mode
     self.fine_tune_after_block = fine_tune_after_block
     self.use_blur = use_blur
     self.image_size = image_size
     self.lineareval_while_pretraining = lineareval_while_pretraining
+    self.num_classes = num_classes
 
   def __call__(self, inputs, training):
     features = inputs
@@ -328,7 +330,9 @@ class SimCLR(tf.keras.models.Model):
       supervised_head_outputs = self.supervised_head(supervised_head_inputs,
                                                      training)
       return None, supervised_head_outputs
-    elif self.train_mode == 'pretrain' and self.lineareval_while_pretraining:
+    elif (self.train_mode == 'pretrain'
+          and self.lineareval_while_pretraining
+          and self.num_classes):
       # When performing pretraining and linear evaluation together we do not
       # want information from linear eval flowing back into pretraining network
       # so we put a stop_gradient.

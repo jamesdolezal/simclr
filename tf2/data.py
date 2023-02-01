@@ -23,23 +23,43 @@ import tensorflow.compat.v2 as tf
 import tensorflow_datasets as tfds
 
 
-class SlideflowBuilder:
+class DatasetBuilder:
 
     def __init__(self, train_dts=None, val_dts=None, test_dts=None, labels=None,
-                 num_classes=None, val_kwargs=None, steps_per_epoch_override=None,
+                 val_kwargs=None, steps_per_epoch_override=None,
                  dataset_kwargs=None):
         """Build a training/validet."""
         if train_dts is None and val_dts is None and test_dts is None:
             raise ValueError("Must supply either train_dts, val_dts, or test_dts.")
-        if labels is not None and num_classes is None:
-            raise ValueError("If labels is not None, must specify `num_classes`")
         if val_kwargs is not None and val_dts is not None:
             raise ValueError("Cannot supply val_kwargs if val_dts is not None")
         if val_kwargs is not None and train_dts is None:
             raise ValueError("Cannot supply val_kwargs if train_dts is None")
 
-        self.labels = labels
+        if isinstance(labels, dict):
+            self.labels = labels
+        elif isinstance(labels, str):
+            self.labels = {}
+            if train_dts is not None:
+                self.labels.update(train_dts.labels(labels)[0])
+            if val_dts is not None:
+                self.labels.update(val_dts.labels(labels)[0])
+            if test_dts is not None:
+                self.labels.update(test_dts.labels(labels)[0])
+        elif labels is not None:
+            raise ValueError(
+                f"Unrecognized type {type(labels)} for argument labels: "
+                "expected dict or str"
+            )
+        else:
+            self.labels = None
         if val_kwargs is not None:
+            if self.labels is None:
+                raise ValueError(
+                    "Unable to automatically generate training/validation "
+                    "splits using keyword arguments (val_kwargs) "
+                    "if labels are not provided."
+                )
             self.train_dts, self.val_dts = train_dts.train_val_split(
                 labels=self.labels,
                 **val_kwargs
@@ -54,10 +74,11 @@ class SlideflowBuilder:
             train_tiles = self.train_dts.num_tiles
         else:
             train_tiles = 0
+        self.num_classes = 0 if self.labels is None else len(set(list(self.labels.values())))
         self.dataset_kwargs = dict() if dataset_kwargs is None else dataset_kwargs
         self.info = data_util.EasyDict(
             features=data_util.EasyDict(
-                label=data_util.EasyDict(num_classes=num_classes)
+                label=data_util.EasyDict(num_classes=self.num_classes)
             ),
             splits=data_util.EasyDict(
                 train=data_util.EasyDict(num_examples=train_tiles),
@@ -89,15 +110,29 @@ class SlideflowBuilder:
             **self.dataset_kwargs
         )
 
+    def build_dataset(self, *args, **kwargs):
+        """Builds a distributed dataset.
 
-def build_input_fn(builder, global_batch_size, topology, is_training, 
-  simCLR_args, cache_dataset=False):
+        Args:
+            batch_size (int): Global batch size across devices.
+            is_training (bool): If this is for training.
+            simclr_args (SimCLR_Args): SimCLR arguments.
+            strategy (tf.distribute.Strategy, optional): Distribution strategy.
+            cache_dataset (bool): Cache dataset.
+
+        Returns:
+            Distributed Tensorflow dataset, with SimCLR preprocessing applied.
+        """
+        return build_distributed_dataset(self, *args, **kwargs)
+
+
+def build_input_fn(builder, global_batch_size, is_training,
+                   simclr_args, cache_dataset=False):
   """Build input function.
 
   Args:
-    builder: TFDS builder for specified dataset.
+    builder: Either DatasetBuilder, or a TFDS builder for specified dataset.
     global_batch_size: Global batch size.
-    topology: An instance of `tf.tpu.experimental.Topology` or None.
     is_training: Whether to build in training mode.
     simCLR_args:  SimCLR arguments, as provided by :func:`slideflow.simclr.get_args`.
 
@@ -112,14 +147,16 @@ def build_input_fn(builder, global_batch_size, topology, is_training,
     logging.info('Global batch size: %d', global_batch_size)
     logging.info('Per-replica batch size: %d', batch_size)
     preprocess_fn_pretrain = get_preprocess_fn(
-      is_training, is_pretrain=True, args=simCLR_args)
+      is_training, is_pretrain=True, image_size=simclr_args.image_size,
+      color_jitter_strength=simclr_args.color_jitter_strength)
     preprocess_fn_finetune = get_preprocess_fn(
-      is_training, is_pretrain=False, args=simCLR_args)
+      is_training, is_pretrain=False, image_size=simclr_args.image_size,
+      color_jitter_strength=simclr_args.color_jitter_strength)
     num_classes = builder.info.features['label'].num_classes
 
     def map_fn(image, label, *args):
       """Produces multiple transformations of the same batch."""
-      if is_training and simCLR_args.train_mode == 'pretrain':
+      if is_training and simclr_args.train_mode == 'pretrain':
         xs = []
         for _ in range(2):  # Two transformations
           xs.append(preprocess_fn_pretrain(image))
@@ -132,7 +169,7 @@ def build_input_fn(builder, global_batch_size, topology, is_training,
 
     logging.info('num_input_pipelines: %d', input_context.num_input_pipelines)
     dataset = builder.as_dataset(
-        split=simCLR_args.train_split if is_training else simCLR_args.eval_split,
+        split=simclr_args.train_split if is_training else simclr_args.eval_split,
         shuffle_files=is_training,
         as_supervised=True,
         # Passing the input_context to TFDS makes TFDS read different parts
@@ -149,7 +186,7 @@ def build_input_fn(builder, global_batch_size, topology, is_training,
       options.experimental_deterministic = False
       options.experimental_slack = True
       dataset = dataset.with_options(options)
-      buffer_multiplier = 50 if simCLR_args.image_size <= 32 else 10
+      buffer_multiplier = 50 if simclr_args.image_size <= 32 else 10
       dataset = dataset.shuffle(batch_size * buffer_multiplier)
       dataset = dataset.repeat(-1)
     dataset = dataset.map(
@@ -161,24 +198,28 @@ def build_input_fn(builder, global_batch_size, topology, is_training,
   return _input_fn
 
 
-def build_distributed_dataset(builder, batch_size, is_training, strategy,
-                              topology, args, cache_dataset=False):
-  input_fn = build_input_fn(builder, batch_size, topology, is_training, args, cache_dataset=cache_dataset)
+def build_distributed_dataset(builder, batch_size, is_training, simclr_args,
+                              strategy=None, cache_dataset=False):
+  if strategy is None:
+    strategy = tf.distribute.get_strategy()
+  input_fn = build_input_fn(
+    builder, batch_size, is_training, simclr_args, cache_dataset=cache_dataset
+  )
   return strategy.distribute_datasets_from_function(input_fn)
 
 
-def get_preprocess_fn(is_training, is_pretrain, args):
+def get_preprocess_fn(is_training, is_pretrain, image_size, color_jitter_strength=1.0):
   """Get function that accepts an image and returns a preprocessed image."""
   # Disable test cropping for small images (e.g. CIFAR)
-  if args.image_size <= 32:
+  if image_size <= 32:
     test_crop = False
   else:
     test_crop = True
   return functools.partial(
       data_util.preprocess_image,
-      height=args.image_size,
-      width=args.image_size,
-      args=args,
+      height=image_size,
+      width=image_size,
+      color_jitter_strength=color_jitter_strength,
       is_training=is_training,
       color_distort=is_pretrain,
       test_crop=test_crop)

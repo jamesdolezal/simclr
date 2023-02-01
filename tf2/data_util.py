@@ -456,14 +456,16 @@ def batch_random_blur(images_list, height, width, blur_probability=0.5):
   return new_images_list
 
 
-def preprocess_for_train(image,
-                         height,
-                         width,
-                         args,
-                         color_distort=True,
-                         crop=True,
-                         flip=True,
-                         impl='simclrv2'):
+def preprocess_for_train(
+    image,
+    height,
+    width,
+    color_jitter_strength=1.0,
+    color_distort=True,
+    crop=True,
+    flip=True,
+    impl='simclrv2'
+):
   """Preprocesses the given image for training.
 
   Args:
@@ -484,7 +486,7 @@ def preprocess_for_train(image,
   if flip:
     image = tf.image.random_flip_left_right(image)
   if color_distort:
-    image = random_color_jitter(image, strength=args.color_jitter_strength,
+    image = random_color_jitter(image, strength=color_jitter_strength,
                                 impl=impl)
   image = tf.reshape(image, [height, width, 3])
   image = tf.clip_by_value(image, 0., 1.)
@@ -510,7 +512,7 @@ def preprocess_for_eval(image, height, width, crop=True):
   return image
 
 
-def preprocess_image(image, height, width, args, is_training=False,
+def preprocess_image(image, height, width, color_jitter_strength=1.0, is_training=False,
                      color_distort=True, test_crop=True):
   """Preprocesses the given image.
 
@@ -528,6 +530,6 @@ def preprocess_image(image, height, width, args, is_training=False,
   """
   image = tf.image.convert_image_dtype(image, dtype=tf.float32)
   if is_training:
-    return preprocess_for_train(image, height, width, args, color_distort)
+    return preprocess_for_train(image, height, width, color_jitter_strength, color_distort)
   else:
     return preprocess_for_eval(image, height, width, test_crop)

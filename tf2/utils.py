@@ -1,38 +1,12 @@
 """Utility functions."""
 
 import json
+import tensorflow as tf
+import json
 from os.path import dirname, join, exists
+from slideflow import log
 
 # -----------------------------------------------------------------------------
-
-def load_model_args(model_path, ignore_missing=False):
-    """Load args.json associated with a given SimCLR model or checkpoint.
-
-    Args:
-        model_path (str): Path to SimCLR model or checkpoint.
-
-    Returns:
-        Dictionary of contents of args.json file. If file is not found and
-        `ignore_missing` is False, will return None. If `ignore_missing` is
-        True, will raise an OSError.
-
-    Raises:
-        OSError: If args.json cannot be found and `ignore_missing` is False.
-    """
-    for flag_path in (join(model_path, 'args.json'),
-                      join(dirname(model_path, 'args.json'))):
-        if exists(flag_path):
-            with open(flag_path, 'r') as f:
-                return SimCLR_Args(**json.load(f))
-    if ignore_missing:
-        return None
-    else:
-        raise OSError(f"Unable to find args.json for SimCLR model {model_path}")
-
-
-def get_args(**kwargs):
-    return SimCLR_Args(**kwargs)
-
 
 class SimCLR_Args:
     def __init__(
@@ -62,7 +36,6 @@ class SimCLR_Args:
         optimizer='lars',                    # Optimizer to use. 'momentum', 'adam', 'lars'
         momentum=0.9,                        # Momentum parameter.
         keep_checkpoint_max=5,               # Maximum number of checkpoints to keep.
-        keep_hub_module_max=1,               # Maximum number of Hub modules to keep.
         temperature=0.1,                     # Temperature parameter for contrastive loss.
         hidden_norm=True,                    # Temperature parameter for contrastive loss.
         proj_head_mode='nonlinear',          # How the head projection is done. 'none', 'linear', 'nonlinear'
@@ -82,4 +55,110 @@ class SimCLR_Args:
         """SimCLR arguments."""
         for argname, argval in dict(locals()).items():
             setattr(self, argname, argval)
-        #TODO: __dict__
+
+    def to_dict(self):
+        return {k:v for k,v in vars(self).items()
+                if k not in ('model_kwargs', 'self')}
+
+    @property
+    def model_kwargs(self):
+        return {
+            k: getattr(self, k)
+            for k in ('num_classes', 'resnet_depth', 'width_multiplier',
+                      'sk_ratio', 'se_ratio', 'image_size', 'batch_norm_decay',
+                      'train_mode', 'use_blur', 'proj_out_dim', 'proj_head_mode',
+                      'lineareval_while_pretraining', 'fine_tune_after_block',
+                      'num_proj_layers', 'ft_proj_selector')
+        }
+
+# -----------------------------------------------------------------------------
+
+def get_args(**kwargs):
+    return SimCLR_Args(**kwargs)
+
+
+def load_model_args(model_path, ignore_missing=False):
+    """Load args.json associated with a given SimCLR model or checkpoint.
+
+    Args:
+        model_path (str): Path to SimCLR model or checkpoint.
+
+    Returns:
+        Dictionary of contents of args.json file. If file is not found and
+        `ignore_missing` is False, will return None. If `ignore_missing` is
+        True, will raise an OSError.
+
+    Raises:
+        OSError: If args.json cannot be found and `ignore_missing` is False.
+    """
+    for flag_path in (join(model_path, 'args.json'),
+                      join(dirname(model_path), 'args.json')):
+        if exists(flag_path):
+            with open(flag_path, 'r') as f:
+                return SimCLR_Args(**json.load(f))
+    if ignore_missing:
+        return None
+    else:
+        raise OSError(f"Unable to find args.json for SimCLR model {model_path}")
+
+# -----------------------------------------------------------------------------
+
+def json_serializable(val):
+  try:
+    json.dumps(val)
+    return True
+  except TypeError:
+    return False
+
+
+def get_salient_tensors_dict(include_projection_head, include_supervised_head):
+  """Returns a dictionary of tensors."""
+  graph = tf.compat.v1.get_default_graph()
+  result = {}
+  for i in range(1, 5):
+    result['block_group%d' % i] = graph.get_tensor_by_name(
+        'resnet/block_group%d/block_group%d:0' % (i, i))
+  result['initial_conv'] = graph.get_tensor_by_name(
+      'resnet/initial_conv/Identity:0')
+  result['initial_max_pool'] = graph.get_tensor_by_name(
+      'resnet/initial_max_pool/Identity:0')
+  result['final_avg_pool'] = graph.get_tensor_by_name('resnet/final_avg_pool:0')
+  if include_supervised_head:
+    result['logits_sup'] = graph.get_tensor_by_name(
+        'head_supervised/logits_sup:0')
+  if include_projection_head:
+    result['proj_head_input'] = graph.get_tensor_by_name(
+        'projection_head/proj_head_input:0')
+    result['proj_head_output'] = graph.get_tensor_by_name(
+        'projection_head/proj_head_output:0')
+  return result
+
+def _restore_latest_or_from_pretrain(checkpoint_manager, args, checkpoint_path):
+  """Restores the latest ckpt if training already.
+
+  Or restores from checkpoint_path if in finetune mode.
+
+  Args:
+    checkpoint_manager: tf.traiin.CheckpointManager.
+  """
+  latest_ckpt = checkpoint_manager.latest_checkpoint
+  if latest_ckpt:
+    # The model is not build yet so some variables may not be available in
+    # the object graph. Those are lazily initialized. To suppress the warning
+    # in that case we specify `expect_partial`.
+    log.info('Restoring from %s', latest_ckpt)
+    checkpoint_manager.checkpoint.restore(latest_ckpt).expect_partial()
+  elif args.train_mode == 'finetune':
+    # Restore from pretrain checkpoint.
+    assert checkpoint_path, 'Missing pretrain checkpoint.'
+    log.info('Restoring from %s', checkpoint_path)
+    checkpoint_manager.checkpoint.restore(checkpoint_path).expect_partial()
+    # TODO(iamtingchen): Can we instead use a zeros initializer for the
+    # supervised head?
+    if args.zero_init_logits_layer:
+      model = checkpoint_manager.checkpoint.model
+      output_layer_parameters = model.supervised_head.trainable_weights
+      log.info('Initializing output layer parameters %s to zero',
+                   [x.op.name for x in output_layer_parameters])
+      for x in output_layer_parameters:
+        x.assign(tf.zeros_like(x))
