@@ -24,22 +24,34 @@ import tensorflow.compat.v2 as tf
 import tensorflow_datasets as tfds
 
 
-class SlideflowBuilder:
+class SimCLR_Dataset:
 
     def __init__(self, train_dts=None, val_dts=None, test_dts=None, labels=None,
-                 num_classes=None, val_kwargs=None, steps_per_epoch_override=None,
+                 val_kwargs=None, steps_per_epoch_override=None,
                  dataset_kwargs=None):
         """Build a training/validet."""
         if train_dts is None and val_dts is None and test_dts is None:
             raise ValueError("Must supply either train_dts, val_dts, or test_dts.")
-        if labels is not None and num_classes is None:
-            raise ValueError("If labels is not None, must specify `num_classes`")
         if val_kwargs is not None and val_dts is not None:
             raise ValueError("Cannot supply val_kwargs if val_dts is not None")
         if val_kwargs is not None and train_dts is None:
             raise ValueError("Cannot supply val_kwargs if train_dts is None")
 
-        self.labels = labels
+        if isinstance(labels, dict):
+            self.labels = labels
+        elif isinstance(labels, str):
+            self.labels = {}
+            if train_dts is not None:
+                self.labels.update(train_dts.labels(labels)[0])
+            if val_dts is not None:
+                self.labels.update(val_dts.labels(labels)[0])
+            if test_dts is not None:
+                self.labels.update(test_dts.labels(labels)[0])
+        else:
+            raise ValueError(
+                f"Unrecognized type {type(labels)} for argument labels: "
+                "expected dict or str"
+            )
         if val_kwargs is not None:
             self.train_dts, self.val_dts = train_dts.train_val_split(
                 labels=self.labels,
@@ -55,10 +67,11 @@ class SlideflowBuilder:
             train_tiles = self.train_dts.num_tiles
         else:
             train_tiles = 0
+        self.num_classes = len(set(list(self.labels.values())))
         self.dataset_kwargs = dict() if dataset_kwargs is None else dataset_kwargs
         self.info = data_util.EasyDict(
             features=data_util.EasyDict(
-                label=data_util.EasyDict(num_classes=num_classes)
+                label=data_util.EasyDict(num_classes=self.num_classes)
             ),
             splits=data_util.EasyDict(
                 train=data_util.EasyDict(num_examples=train_tiles),

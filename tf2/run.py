@@ -315,6 +315,11 @@ def load(model):
     return tf.saved_model.load(model)
 
 
+def load_model_or_checkpoint(model):
+    """Load either a SavedModel or SimCLR checkpoint, returning a Keras model."""
+    ...
+
+
 def try_restore_from_checkpoint(model, global_step, optimizer):
   """Restores the latest ckpt if it exists, otherwise check FLAGS.checkpoint."""
   checkpoint = tf.train.Checkpoint(
@@ -440,7 +445,7 @@ def perform_evaluation(model, builder, eval_steps, ckpt, strategy, topology):
   flag_json_path = os.path.join(FLAGS.model_dir, 'flags.json')
   with tf.io.gfile.GFile(flag_json_path, 'w') as f:
     serializable_flags = {}
-    for key, val in FLAGS.flag_values_dict().items():
+    for key, val in dict(FLAGS).items():
       # Some flag value types e.g. datetime.timedelta are not json serializable,
       # filter those out.
       if json_serializable(val):
