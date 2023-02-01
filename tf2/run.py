@@ -116,7 +116,7 @@ def load(model):
 def load_model_or_checkpoint(model_or_ckpt):
     if model_or_ckpt.endswith('.ckpt'):
         args = utils_lib.load_model_args(model_or_ckpt)
-        model = ...
+        model = model_lib.SimCLR(**args.model_kwargs)
         try_restore_from_checkpoint(model)
     else:
         model = load(model_or_ckpt)
@@ -230,7 +230,9 @@ def perform_evaluation(
     l = labels['labels']
     metrics.update_finetune_metrics_eval(label_top_1_accuracy,
                                          label_top_5_accuracy, outputs, l)
-    reg_loss = model_lib.add_weight_decay(model, args, adjust_per_optimizer=True)
+    reg_loss = model_lib.add_weight_decay(
+        model, args.optimizer, args.weight_decay, adjust_per_optimizer=True
+    )
     regularization_loss.update_state(reg_loss)
 
   with strategy.scope():
@@ -355,7 +357,7 @@ def run_simclr(
     builder.download_and_prepare()
   num_train_examples = builder.info.splits[args.train_split].num_examples
   num_eval_examples = builder.info.splits[args.eval_split].num_examples
-  num_classes = builder.info.features['label'].num_classes
+  args.num_classes = builder.info.features['label'].num_classes
 
   train_steps = model_lib.get_train_steps(num_train_examples, args.train_steps,
     args.train_epochs, args.train_batch_size)
@@ -392,7 +394,7 @@ def run_simclr(
                  strategy.num_replicas_in_sync)
 
   with strategy.scope():
-    model = model_lib.SimCLR(num_classes, args=args)
+    model = model_lib.SimCLR(**args.model_kwargs)
 
   if args.mode == 'eval':
     for ckpt in tf.train.checkpoints_iterator(
@@ -412,9 +414,21 @@ def run_simclr(
                                               True, strategy, topology, args)
 
       # Build LR schedule and optimizer.
-      learning_rate = model_lib.WarmUpAndCosineDecay(args,
-                                                     num_train_examples)
-      optimizer = model_lib.build_optimizer(learning_rate, args)
+      learning_rate = model_lib.WarmUpAndCosineDecay(
+        learning_rate=args.learning_rate,
+        num_examples=num_train_examples,
+        warmup_epochs=args.warmup_epochs,
+        train_batch_size=args.train_batch_size,
+        learning_rate_scaling=args.learning_rate_scaling,
+        train_steps=args.train_steps,
+        train_epochs=args.train_epochs
+    )
+      optimizer = model_lib.build_optimizer(
+        learning_rate=learning_rate,
+        optimizer=args.optimizer,
+        momentum=args.momentum,
+        weight_decay=args.weight_decay
+      )
 
       # Build metrics.
       all_metrics = []  # For summaries.
@@ -495,7 +509,8 @@ def run_simclr(
                                                 supervised_acc_metric, sup_loss,
                                                 l, outputs)
         weight_decay = model_lib.add_weight_decay(
-            model, args, adjust_per_optimizer=True)
+            model, args.optimizer, args.weight_decay, adjust_per_optimizer=True
+        )
         weight_decay_metric.update_state(weight_decay)
         loss += weight_decay
         total_loss_metric.update_state(loss)

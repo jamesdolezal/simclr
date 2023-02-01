@@ -77,7 +77,9 @@ class SimCLR_Args:
         image_size=224,                      # Input image size.
         color_jitter_strength=1.0,           # The strength of color jittering.
         use_blur=True,                       # Whether or not to use Gaussian blur for augmentation during pretraining.
+        num_classes=None,                    # Number of classes for the supervised head.
     ) -> None:
         """SimCLR arguments."""
         for argname, argval in dict(locals()).items():
             setattr(self, argname, argval)
+        #TODO: __dict__

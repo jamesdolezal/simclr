@@ -28,15 +28,17 @@ BATCH_NORM_EPSILON = 1e-5
 
 class BatchNormRelu(tf.keras.layers.Layer):  # pylint: disable=missing-docstring
 
-  def __init__(self,
-               relu=True,
-               init_zero=False,
-               center=True,
-               scale=True,
-               data_format='channels_last',
-               batch_norm_decay=0.9,
-               global_bn=True,
-               **kwargs):
+  def __init__(
+    self,
+    relu=True,
+    init_zero=False,
+    center=True,
+    scale=True,
+    data_format='channels_last',
+    batch_norm_decay=0.9,
+    global_bn=True,
+    **kwargs
+  ):
     super(BatchNormRelu, self).__init__(**kwargs)
     self.relu = relu
     if init_zero:
@@ -361,7 +363,7 @@ class ResidualBlock(tf.keras.layers.Layer):  # pylint: disable=missing-docstring
                 data_format=data_format))
       self.shortcut_layers.append(
           BatchNormRelu(
-            relu=False, data_format=data_format, 
+            relu=False, data_format=data_format,
             batch_norm_decay=batch_norm_decay, global_bn=global_bn))
 
     self.conv2d_bn_layers.append(
@@ -378,7 +380,7 @@ class ResidualBlock(tf.keras.layers.Layer):  # pylint: disable=missing-docstring
             filters=filters, kernel_size=3, strides=1, data_format=data_format))
     self.conv2d_bn_layers.append(
         BatchNormRelu(
-          relu=False, init_zero=True, data_format=data_format, 
+          relu=False, init_zero=True, data_format=data_format,
           batch_norm_decay=batch_norm_decay, global_bn=global_bn))
     if se_ratio > 0:
       self.se_layer = SE_Layer(filters, se_ratio, data_format=data_format)
@@ -441,7 +443,7 @@ class BottleneckBlock(tf.keras.layers.Layer):
                 strides=strides,
                 data_format=data_format))
       self.projection_layers.append(
-          BatchNormRelu(relu=False, data_format=data_format, 
+          BatchNormRelu(relu=False, data_format=data_format,
           batch_norm_decay=batch_norm_decay, global_bn=global_bn))
     self.shortcut_dropblock = DropBlock(
         data_format=data_format,
@@ -454,7 +456,7 @@ class BottleneckBlock(tf.keras.layers.Layer):
         Conv2dFixedPadding(
             filters=filters, kernel_size=1, strides=1, data_format=data_format))
     self.conv_relu_dropblock_layers.append(
-        BatchNormRelu(data_format=data_format, 
+        BatchNormRelu(data_format=data_format,
         batch_norm_decay=batch_norm_decay, global_bn=global_bn))
     self.conv_relu_dropblock_layers.append(
         DropBlock(
@@ -464,7 +466,7 @@ class BottleneckBlock(tf.keras.layers.Layer):
 
     if sk_ratio > 0:
       self.conv_relu_dropblock_layers.append(
-          SK_Conv2D(filters, strides, sk_ratio, batch_norm_decay, global_bn, 
+          SK_Conv2D(filters, strides, sk_ratio, batch_norm_decay, global_bn,
           data_format=data_format))
     else:
       self.conv_relu_dropblock_layers.append(
@@ -475,7 +477,7 @@ class BottleneckBlock(tf.keras.layers.Layer):
               data_format=data_format))
       self.conv_relu_dropblock_layers.append(
           BatchNormRelu(
-            data_format=data_format, batch_norm_decay=batch_norm_decay, 
+            data_format=data_format, batch_norm_decay=batch_norm_decay,
             global_bn=global_bn))
     self.conv_relu_dropblock_layers.append(
         DropBlock(
@@ -490,7 +492,7 @@ class BottleneckBlock(tf.keras.layers.Layer):
             strides=1,
             data_format=data_format))
     self.conv_relu_dropblock_layers.append(
-        BatchNormRelu(relu=False, init_zero=True, data_format=data_format, 
+        BatchNormRelu(relu=False, init_zero=True, data_format=data_format,
         batch_norm_decay=batch_norm_decay, global_bn=global_bn))
     self.conv_relu_dropblock_layers.append(
         DropBlock(
@@ -601,7 +603,7 @@ class Resnet(tf.keras.layers.Layer):  # pylint: disable=missing-docstring
           IdentityLayer(name='initial_conv', trainable=trainable))
       self.initial_conv_relu_max_pool.append(
           BatchNormRelu(
-            data_format=data_format, trainable=trainable, 
+            data_format=data_format, trainable=trainable,
             batch_norm_decay=batch_norm_decay, global_bn=global_bn))
       self.initial_conv_relu_max_pool.append(
           IdentityLayer(name='initial_max_pool', trainable=trainable))
@@ -616,7 +618,7 @@ class Resnet(tf.keras.layers.Layer):  # pylint: disable=missing-docstring
                 trainable=trainable))
         self.initial_conv_relu_max_pool.append(
             BatchNormRelu(
-              data_format=data_format, trainable=trainable, 
+              data_format=data_format, trainable=trainable,
               batch_norm_decay=batch_norm_decay, global_bn=global_bn))
         self.initial_conv_relu_max_pool.append(
             Conv2dFixedPadding(
@@ -627,7 +629,7 @@ class Resnet(tf.keras.layers.Layer):  # pylint: disable=missing-docstring
                 trainable=trainable))
         self.initial_conv_relu_max_pool.append(
             BatchNormRelu(
-              data_format=data_format, trainable=trainable, 
+              data_format=data_format, trainable=trainable,
               batch_norm_decay=batch_norm_decay, global_bn=global_bn))
         self.initial_conv_relu_max_pool.append(
             Conv2dFixedPadding(
@@ -647,7 +649,7 @@ class Resnet(tf.keras.layers.Layer):  # pylint: disable=missing-docstring
       self.initial_conv_relu_max_pool.append(
           IdentityLayer(name='initial_conv', trainable=trainable))
       self.initial_conv_relu_max_pool.append(
-          BatchNormRelu(data_format=data_format, trainable=trainable, 
+          BatchNormRelu(data_format=data_format, trainable=trainable,
             batch_norm_decay=batch_norm_decay, global_bn=global_bn))
 
       self.initial_conv_relu_max_pool.append(
@@ -766,7 +768,7 @@ def resnet(resnet_depth,
            data_format='channels_last',
            dropblock_keep_probs=None,
            dropblock_size=None,
-           train_mode='pretrain',  
+           train_mode='pretrain',
            sk_ratio=0.,
            se_ratio=0.,
            batch_norm_decay=0.9,
@@ -811,7 +813,7 @@ def resnet(resnet_depth,
       dropblock_keep_probs=dropblock_keep_probs,
       dropblock_size=dropblock_size,
       data_format=data_format,
-      train_mode=train_mode, 
+      train_mode=train_mode,
       sk_ratio=sk_ratio,
       se_ratio=se_ratio,
       batch_norm_decay=batch_norm_decay,

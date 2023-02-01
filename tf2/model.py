@@ -23,27 +23,27 @@ from . import lars_optimizer
 from . import resnet
 
 
-def build_optimizer(learning_rate, args):
+def build_optimizer(learning_rate, optimizer, momentum, weight_decay):
   """Returns the optimizer."""
-  if args.optimizer == 'momentum':
-    return tf.keras.optimizers.SGD(learning_rate, args.momentum, nesterov=True)
-  elif args.optimizer == 'adam':
+  if optimizer == 'momentum':
+    return tf.keras.optimizers.SGD(learning_rate, momentum, nesterov=True)
+  elif optimizer == 'adam':
     return tf.keras.optimizers.Adam(learning_rate)
-  elif args.optimizer == 'lars':
+  elif optimizer == 'lars':
     return lars_optimizer.LARSOptimizer(
         learning_rate,
-        momentum=args.momentum,
-        weight_decay=args.weight_decay,
+        momentum=momentum,
+        weight_decay=weight_decay,
         exclude_from_weight_decay=[
             'batch_normalization', 'bias', 'head_supervised'
         ])
   else:
-    raise ValueError('Unknown optimizer {}'.format(args.optimizer))
+    raise ValueError('Unknown optimizer {}'.format(optimizer))
 
 
-def add_weight_decay(model, args, adjust_per_optimizer=True):
-  """Compute weight decay from flags."""
-  if adjust_per_optimizer and 'lars' in args.optimizer:
+def add_weight_decay(model, optimizer, weight_decay, adjust_per_optimizer=True):
+  """Compute weight decay."""
+  if adjust_per_optimizer and 'lars' in optimizer:
     # Weight decay are taking care of by optimizer for these cases.
     # Except for supervised head, which will be added here.
     l2_losses = [
@@ -52,7 +52,7 @@ def add_weight_decay(model, args, adjust_per_optimizer=True):
         if 'head_supervised' in v.name and 'bias' not in v.name
     ]
     if l2_losses:
-      return args.weight_decay * tf.add_n(l2_losses)
+      return weight_decay * tf.add_n(l2_losses)
     else:
       return 0
 
@@ -62,7 +62,7 @@ def add_weight_decay(model, args, adjust_per_optimizer=True):
       for v in model.trainable_weights
       if 'batch_normalization' not in v.name
   ]
-  loss = args.weight_decay * tf.add_n(l2_losses)
+  loss = weight_decay * tf.add_n(l2_losses)
   return loss
 
 
@@ -75,16 +75,27 @@ def get_train_steps(num_examples, train_steps, train_epochs, train_batch_size):
 class WarmUpAndCosineDecay(tf.keras.optimizers.schedules.LearningRateSchedule):
   """Applies a warmup schedule on a given learning rate decay schedule."""
 
-  def __init__(self, args, num_examples, name=None):
+  def __init__(
+    self,
+    learning_rate,
+    num_examples,
+    *,
+    warmup_epochs=10,
+    train_batch_size=512,
+    learning_rate_scaling='linear',
+    train_steps=0,
+    train_epochs=100,
+    name=None
+  ):
     super(WarmUpAndCosineDecay, self).__init__()
-    self.base_learning_rate = args.learning_rate
+    self.base_learning_rate = learning_rate
     self.num_examples = num_examples
     self._name = name
-    self.warmup_epochs = args.warmup_epochs
-    self.train_batch_size = args.train_batch_size
-    self.learning_rate_scaling = args.learning_rate_scaling
-    self.train_steps = args.train_steps
-    self.train_epochs = args.train_epochs
+    self.warmup_epochs = warmup_epochs
+    self.train_batch_size = train_batch_size
+    self.learning_rate_scaling = learning_rate_scaling
+    self.train_steps = train_steps
+    self.train_epochs = train_epochs
 
   def __call__(self, step):
     with tf.name_scope(self._name or 'WarmUpAndCosineDecay'):
@@ -121,12 +132,14 @@ class WarmUpAndCosineDecay(tf.keras.optimizers.schedules.LearningRateSchedule):
 
 class LinearLayer(tf.keras.layers.Layer):
 
-  def __init__(self,
-               num_classes,
-               use_bias=True,
-               use_bn=False,
-               name='linear_layer',
-               **kwargs):
+  def __init__(
+    self,
+    num_classes,
+    use_bias=True,
+    use_bn=False,
+    name='linear_layer',
+    **kwargs
+  ):
     # Note: use_bias is ignored for the dense layer when use_bn=True.
     # However, it is still used for batch norm.
     super(LinearLayer, self).__init__(**kwargs)
@@ -159,19 +172,25 @@ class LinearLayer(tf.keras.layers.Layer):
 
 class ProjectionHead(tf.keras.layers.Layer):
 
-  def __init__(self, args, **kwargs):
-    out_dim = args.proj_out_dim
+  def __init__(
+    self,
+    proj_out_dim,
+    proj_head_mode='nonlinear',
+    num_proj_layers=3,
+    ft_proj_selector=0,
+    **kwargs
+  ):
     self.linear_layers = []
-    if args.proj_head_mode == 'none':
+    if proj_head_mode == 'none':
       pass  # directly use the output hiddens as hiddens
-    elif args.proj_head_mode == 'linear':
+    elif proj_head_mode == 'linear':
       self.linear_layers = [
           LinearLayer(
-              num_classes=out_dim, use_bias=False, use_bn=True, name='l_0')
+              num_classes=proj_out_dim, use_bias=False, use_bn=True, name='l_0')
       ]
-    elif args.proj_head_mode == 'nonlinear':
-      for j in range(args.num_proj_layers):
-        if j != args.num_proj_layers - 1:
+    elif proj_head_mode == 'nonlinear':
+      for j in range(num_proj_layers):
+        if j != num_proj_layers - 1:
           # for the middle layers, use bias and relu for the output.
           self.linear_layers.append(
               LinearLayer(
@@ -183,18 +202,18 @@ class ProjectionHead(tf.keras.layers.Layer):
           # for the final layer, neither bias nor relu is used.
           self.linear_layers.append(
               LinearLayer(
-                  num_classes=args.proj_out_dim,
+                  num_classes=proj_out_dim,
                   use_bias=False,
                   use_bn=True,
                   name='nl_%d' % j))
     else:
       raise ValueError('Unknown head projection mode {}'.format(
-          args.proj_head_mode))
+          proj_head_mode))
     super(ProjectionHead, self).__init__(**kwargs)
 
-    self.proj_head_mode = args.proj_head_mode
-    self.num_proj_layers = args.num_proj_layers
-    self.ft_proj_selector = args.ft_proj_selector
+    self.proj_head_mode = proj_head_mode
+    self.num_proj_layers = num_proj_layers
+    self.ft_proj_selector = ft_proj_selector
 
   def call(self, inputs, training):
     if self.proj_head_mode == 'none':
@@ -248,6 +267,10 @@ class SimCLR(tf.keras.models.Model):
     lineareval_while_pretraining=True,
     fine_tune_after_block=-1,
     use_blur=True,
+    proj_out_dim=128,
+    proj_head_mode='nonlinear',
+    num_proj_layers=3,
+    ft_proj_selector=0,
     **kwargs
 ):
     super(SimCLR, self).__init__(**kwargs)
@@ -260,7 +283,12 @@ class SimCLR(tf.keras.models.Model):
         batch_norm_decay=batch_norm_decay,
         fine_tune_after_block=fine_tune_after_block
     )
-    self._projection_head = ProjectionHead(args)
+    self._projection_head = ProjectionHead(
+      proj_out_dim,
+      proj_head_mode=proj_head_mode,
+      num_proj_layers=num_proj_layers,
+      ft_proj_selector=ft_proj_selector
+    )
     if train_mode == 'finetune' or lineareval_while_pretraining:
       self.supervised_head = SupervisedHead(num_classes)
     self.train_mode = train_mode
