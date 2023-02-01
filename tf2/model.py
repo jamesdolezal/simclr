@@ -102,7 +102,7 @@ class WarmUpAndCosineDecay(tf.keras.optimizers.schedules.LearningRateSchedule):
           step / float(warmup_steps) * scaled_lr if warmup_steps else scaled_lr)
 
       # Cosine decay learning rate schedule
-      total_steps = get_train_steps(self.num_examples, self.train_steps, 
+      total_steps = get_train_steps(self.num_examples, self.train_steps,
         self.train_epochs, self.train_batch_size)
       # TODO(srbs): Cache this object.
       cosine_decay = tf.keras.experimental.CosineDecay(
@@ -235,27 +235,39 @@ class SupervisedHead(tf.keras.layers.Layer):
 class SimCLR(tf.keras.models.Model):
   """Resnet model with projection or supervised layer."""
 
-  def __init__(self, num_classes, args, **kwargs):
+  def __init__(
+    self,
+    num_classes,
+    resnet_depth=50,
+    width_multiplier=1,
+    sk_ratio=0.,
+    se_ratio=0.,
+    image_size=224,
+    batch_norm_decay=0.9,
+    train_mode='pretrain',
+    lineareval_while_pretraining=True,
+    fine_tune_after_block=-1,
+    use_blur=True,
+    **kwargs
+):
     super(SimCLR, self).__init__(**kwargs)
     self.resnet_model = resnet.resnet(
-        resnet_depth=args.resnet_depth,
-        width_multiplier=args.width_multiplier,
-        cifar_stem=args.image_size <= 32,
-        train_mode=args.train_mode,
-        sk_ratio=args.sk_ratio,
-        se_ratio=args.se_ratio,
-        batch_norm_decay=args.batch_norm_decay,
-        fine_tune_after_block=args.fine_tune_after_block
+        train_mode=train_mode,
+        width_multiplier=width_multiplier,
+        cifar_stem=image_size <= 32,
+        sk_ratio=sk_ratio,
+        se_ratio=se_ratio,
+        batch_norm_decay=batch_norm_decay,
+        fine_tune_after_block=fine_tune_after_block
     )
-
     self._projection_head = ProjectionHead(args)
-    if args.train_mode == 'finetune' or args.lineareval_while_pretraining:
+    if train_mode == 'finetune' or lineareval_while_pretraining:
       self.supervised_head = SupervisedHead(num_classes)
-    self.train_mode = args.train_mode
-    self.fine_tune_after_block = args.fine_tune_after_block
-    self.use_blur = args.use_blur
-    self.image_size = args.image_size
-    self.lineareval_while_pretraining = args.lineareval_while_pretraining
+    self.train_mode = train_mode
+    self.fine_tune_after_block = fine_tune_after_block
+    self.use_blur = use_blur
+    self.image_size = image_size
+    self.lineareval_while_pretraining = lineareval_while_pretraining
 
   def __call__(self, inputs, training):
     features = inputs

@@ -26,6 +26,7 @@ from . import data as data_lib
 from . import metrics
 from . import model as model_lib
 from . import objective as obj_lib
+from . import utils as utils_lib
 
 import tensorflow.compat.v2 as tf
 import tensorflow_datasets as tfds
@@ -90,7 +91,7 @@ def save(model, args, model_dir, global_step, dest=None, nested_by_step=False):
   tf.saved_model.save(saved_model, checkpoint_export_dir)
 
   # Write flags to model folder.
-  with open(os.path.join(export_dir, 'flags.json'), "w") as data_file:
+  with open(os.path.join(export_dir, 'args.json'), "w") as data_file:
     dump_dict = vars(args)
     dump_dict['model_dir'] = model_dir
     json.dump(dump_dict, data_file, indent=1)
@@ -112,13 +113,24 @@ def load(model):
     return tf.saved_model.load(model)
 
 
+def load_model_or_checkpoint(model_or_ckpt):
+    if model_or_ckpt.endswith('.ckpt'):
+        args = utils_lib.load_model_args(model_or_ckpt)
+        model = ...
+        try_restore_from_checkpoint(model)
+    else:
+        model = load(model_or_ckpt)
+    return model
+
+
 def try_restore_from_checkpoint(
     model,
     global_step,
     optimizer,
     model_dir,
     checkpoint_path,
-    args
+    keep_checkpoint_max=5,
+    zero_init_logits_layer=False,
   ):
   """Restores the latest ckpt if it exists, otherwise check checkpoint_path"""
   checkpoint = tf.train.Checkpoint(
@@ -126,7 +138,7 @@ def try_restore_from_checkpoint(
   checkpoint_manager = tf.train.CheckpointManager(
       checkpoint,
       directory=model_dir,
-      max_to_keep=args.keep_checkpoint_max)
+      max_to_keep=keep_checkpoint_max)
   latest_ckpt = checkpoint_manager.latest_checkpoint
   if latest_ckpt:
     # Restore model weights, global step, optimizer states
@@ -138,9 +150,9 @@ def try_restore_from_checkpoint(
     checkpoint_manager2 = tf.train.CheckpointManager(
         tf.train.Checkpoint(model=model),
         directory=model_dir,
-        max_to_keep=args.keep_checkpoint_max)
+        max_to_keep=keep_checkpoint_max)
     checkpoint_manager2.checkpoint.restore(checkpoint_path).expect_partial()
-    if args.zero_init_logits_layer:
+    if zero_init_logits_layer:
       model = checkpoint_manager2.checkpoint.model
       output_layer_parameters = model.supervised_head.trainable_weights
       logging.info('Initializing output layer parameters %s to zero',
@@ -152,7 +164,7 @@ def try_restore_from_checkpoint(
 
 
 def checkpoint_to_saved_model(ckpt, args, model_dir, num_logits, dest, global_step=0):
-    # FIXME:M `args, model_dir` where added to the arguments but I don't see 
+    # FIXME:M `args, model_dir` where added to the arguments but I don't see
     #         where this function is used
     from .model import SimCLR
     model = SimCLR(num_logits, args)
@@ -173,15 +185,15 @@ def json_serializable(val):
 
 
 def perform_evaluation(
-  model, 
+  model,
   builder,
-  eval_steps, 
+  eval_steps,
   ckpt,
   strategy,
   topology,
-  model_dir, 
+  model_dir,
   cache_dataset,
-  args, 
+  args,
 ):
   """Perform evaluation."""
   if args.train_mode == 'pretrain' and not args.lineareval_while_pretraining:
@@ -253,7 +265,7 @@ def perform_evaluation(
       model_dir, 'result_%d.json'%result['global_step'])
   with tf.io.gfile.GFile(result_json_path, 'w') as f:
     json.dump({k: float(v) for k, v in result.items()}, f)
-  flag_json_path = os.path.join(model_dir, 'flags.json')
+  flag_json_path = os.path.join(model_dir, 'args.json')
   with tf.io.gfile.GFile(flag_json_path, 'w') as f:
     serializable_flags = {}
 
@@ -304,7 +316,6 @@ def _restore_latest_or_from_pretrain(checkpoint_manager, args, checkpoint_path):
 def run_simclr(
   args,
   builder=None,
-  
   model_dir=None,
   cache_dataset=False,
   checkpoint_path=None,
@@ -321,22 +332,22 @@ def run_simclr(
     builder : FIXME:M take care of these once we better define SlideflowBuilder
 
     model_dir (str): Model directory for training.
-    cache_dataset (bool): Whether to cache the entire dataset in memory. If 
+    cache_dataset (bool): Whether to cache the entire dataset in memory. If
       the dataset is ImageNet, this is a very bad idea, but for smaller datasets
       it can improve performance
-    checkpoint_path (str): Loading from the given checkpoint for fine-tuning if 
+    checkpoint_path (str): Loading from the given checkpoint for fine-tuning if
       a finetuning checkpoint does not already exist in model_dir
     use_tpu (bool): Whether to run on TPU.
     tpu_name (str): The Cloud TPU to use for training. This should be either the
-      name used when creating the Cloud TPU, or a grpc://ip.address.of.tpu:8470 
+      name used when creating the Cloud TPU, or a grpc://ip.address.of.tpu:8470
       url
-    tpu_zone (str): GCE zone where the Cloud TPU is located in. If not 
-      specified, we will attempt to automatically detect the GCE project from 
+    tpu_zone (str): GCE zone where the Cloud TPU is located in. If not
+      specified, we will attempt to automatically detect the GCE project from
       metadata
-    gcp_project (str): Project name for the Cloud TPU-enabled project. If not 
-      specified, we will attempt to automatically detect the GCE project from 
+    gcp_project (str): Project name for the Cloud TPU-enabled project. If not
+      specified, we will attempt to automatically detect the GCE project from
       metadata
-    
+
   """
 
   if builder is None:
@@ -387,7 +398,7 @@ def run_simclr(
     for ckpt in tf.train.checkpoints_iterator(
         model_dir, min_interval_secs=15):
       result = perform_evaluation(
-        model, builder, eval_steps, ckpt, strategy, topology,  model_dir, 
+        model, builder, eval_steps, ckpt, strategy, topology,  model_dir,
         cache_dataset, args
       )
       if result['global_step'] >= train_steps:
@@ -425,7 +436,9 @@ def run_simclr(
 
       # Restore checkpoint if available.
       checkpoint_manager = try_restore_from_checkpoint(
-          model, optimizer.iterations, optimizer, model_dir, checkpoint_path, args)
+          model, optimizer.iterations, optimizer, model_dir, checkpoint_path,
+          keep_checkpoint_max=args.keep_checkpoint_max,
+          zero_init_logits_layer=args.zero_init_logits_layer)
 
     steps_per_loop = checkpoint_steps
 
