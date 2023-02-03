@@ -304,6 +304,7 @@ def run_simclr(
       math.ceil(num_eval_examples / args.eval_batch_size))
   epoch_steps = int(round(num_train_examples / args.train_batch_size))
 
+  logging.info(f"SimCLR Args: {json.dumps(args.to_dict(), indent=1)}")
   logging.info('# train examples: %d', num_train_examples)
   logging.info('# train_steps: %d', train_steps)
   logging.info('# eval examples: %d', num_eval_examples)
