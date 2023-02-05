@@ -60,7 +60,7 @@ class DatasetBuilder:
                     "splits using keyword arguments (val_kwargs) "
                     "if labels are not provided."
                 )
-            self.train_dts, self.val_dts = train_dts.train_val_split(
+            self.train_dts, self.val_dts = train_dts.split(
                 labels=self.labels,
                 **val_kwargs
             )

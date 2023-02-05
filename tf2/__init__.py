@@ -135,8 +135,8 @@ def try_restore_from_checkpoint(
   return checkpoint_manager
 
 
-def checkpoint_to_saved_model(ckpt, args, dest, num_logits, global_step=0):
-    model = model_lib.SimCLR(num_logits, args)
+def checkpoint_to_saved_model(ckpt, args, dest, global_step=0):
+    model = model_lib.SimCLR(**args.model_kwargs)
     checkpoint = tf.train.Checkpoint(
         model=model,
         global_step=tf.Variable(0, dtype=tf.int64)
