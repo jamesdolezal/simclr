@@ -25,10 +25,30 @@ import tensorflow_datasets as tfds
 
 class DatasetBuilder:
 
-    def __init__(self, train_dts=None, val_dts=None, test_dts=None, labels=None,
+    def __init__(self, train_dts=None, val_dts=None, test_dts=None, *, labels=None,
                  val_kwargs=None, steps_per_epoch_override=None,
                  dataset_kwargs=None):
-        """Build a training/validet."""
+        """Build a training/validation dataset pipeline for SimCLR.
+
+        Args:
+            train_dts (sf.Dataset, optional): Training dataset.
+            val_dts (sf.Dataset, optional): Optional validation dataset.
+            test_dts (sf.Dataset, optional): Optional held-out test set.
+
+        Keyword args:
+            labels (str or dict): Labels for training the supervised head.
+                Can be a name of an outcome (str) or a dict mapping slide names
+                to labels.
+            val_kwargs (dict, optional): Optional keyword arguments for
+                generating a validation dataset from ``train_dts`` via
+                ``train_dts.split()``. Incompatible with ``val_dts``.
+            steps_per_epoch_override (int, optional): Override the number
+                of steps per epoch.
+            dataset_kwargs (dict, optional): Keyword arguments passed to the
+                :meth:`slideflow.Dataset.tensorflow` method when creating
+                the input pipeline.
+
+        """
         if train_dts is None and val_dts is None and test_dts is None:
             raise ValueError("Must supply either train_dts, val_dts, or test_dts.")
         if val_kwargs is not None and val_dts is not None:

@@ -12,54 +12,54 @@ class SimCLR_Args:
     def __init__(
         self,
         learning_rate=0.3,
-        learning_rate_scaling='linear', 
-        warmup_epochs=10, 
+        learning_rate_scaling='linear',
+        warmup_epochs=10,
         weight_decay=1e-6,
-        batch_norm_decay=0.9, 
-        train_batch_size=512, 
+        batch_norm_decay=0.9,
+        train_batch_size=512,
         train_split='train',
-        train_epochs=100, 
+        train_epochs=100,
         train_steps=0,
-        eval_steps=0, 
+        eval_steps=0,
         eval_batch_size=256,
         checkpoint_epochs=1,
-        checkpoint_steps=0, 
+        checkpoint_steps=0,
         eval_split='validation',
-        dataset='imagenet2012', 
-        mode='train', 
+        dataset='imagenet2012',
+        mode='train',
         train_mode='pretrain',
         lineareval_while_pretraining=True,
-        zero_init_logits_layer=False, 
-        fine_tune_after_block=-1, 
+        zero_init_logits_layer=False,
+        fine_tune_after_block=-1,
         master=None,
         data_dir=None,
-        optimizer='lars', 
-        momentum=0.9, 
+        optimizer='lars',
+        momentum=0.9,
         keep_checkpoint_max=5,
         temperature=0.1,
-        hidden_norm=True, 
-        proj_head_mode='nonlinear', 
-        proj_out_dim=128, 
+        hidden_norm=True,
+        proj_head_mode='nonlinear',
+        proj_out_dim=128,
         num_proj_layers=3,
-        ft_proj_selector=0, 
-        global_bn=True, 
-        width_multiplier=1, 
+        ft_proj_selector=0,
+        global_bn=True,
+        width_multiplier=1,
         resnet_depth=50,
         sk_ratio=0.,
         se_ratio=0.,
-        image_size=224, 
+        image_size=224,
         color_jitter_strength=1.0,
         use_blur=True,
-        num_classes=None, 
+        num_classes=None,
     ) -> None:
       """SimCLR arguments.
 
-      A class containg all default - if not overwritten at initialization - 
+      A class containg all default - if not overwritten at initialization -
         SimCLR arguments.
-      
+
       Keyword Args:
         learning_rate (float): Initial learning rate per batch size of 256.
-        learning_rate_scaling (str): How to scale the learning rate as a 
+        learning_rate_scaling (str): How to scale the learning rate as a
           function of batch size. 'linear' or 'sqrt'.
         warmup_epochs (int): Number of epochs of warmup.
         weight_decay (float):  Amount of weight decay to use.
@@ -69,27 +69,27 @@ class SimCLR_Args:
         train_epoch (int): Number of epochs to train for.
         train_step (int): Number of steps to train for. If provided, overrides
           train_epochs.
-        eval_steps (int): Number of steps to eval for. If not provided, evals 
+        eval_steps (int): Number of steps to eval for. If not provided, evals
           over entire dataset.
         eval_batch_size (int): Batch size for eval.
-        checkpoint_epochs (int): Number of epochs between 
+        checkpoint_epochs (int): Number of epochs between
           checkpoints/summaries.
         checkpoint_steps (int): Number of steps between checkpoints/summaries.
           If provided, overrides checkpoint_epochs.
         eval_split (str): Split for evaluation.
         dataset (str): Name of a dataset.
-        mode (str): Whether to perform training or evaluation. 'train', 
+        mode (str): Whether to perform training or evaluation. 'train',
           'eval', or 'train_then_eval'
         train_mode (str): The train mode controls different objectives and
           trainable components.
-        lineareval_while_pretraining (bool): Whether to finetune supervised 
+        lineareval_while_pretraining (bool): Whether to finetune supervised
           head while pretraining. 'pretrain' or 'finetune'
         zero_init_logits_layer (bool): If True, zero initialize layers after
           avg_pool for supervised learning.
         fine_tune_after_block (int): The layers after which block that we will
             fine-tune. -1 means fine-tuning everything. 0 means fine-tuning
             after stem block. 4 means fine-tuning just the linear head.
-        master (str): Address/name of the TensorFlow master to use. 
+        master (str): Address/name of the TensorFlow master to use.
           By default, use an in-process master.
         data_dir (str): Directory where dataset is stored.
         optimizer (str): Optimizer to use. 'momentum', 'adam', 'lars'
@@ -101,8 +101,8 @@ class SimCLR_Args:
           'linear', 'nonlinear'
         proj_out_dim (int): Number of head projection dimension.
         num_proj_layers (int): Number of non-linear head layers.
-        ft_proj_selector (int): Which layer of the projection head to use 
-          during fine-tuning. 0 means no projection head, and -1 means the 
+        ft_proj_selector (int): Which layer of the projection head to use
+          during fine-tuning. 0 means no projection head, and -1 means the
           final layer.
         global_bn (bool): Whether to aggregate BN statistics across
           distributed cores.
@@ -115,7 +115,7 @@ class SimCLR_Args:
         color_jitter_strength (float): The strength of color jittering.
         use_blur (bool): Whether or not to use Gaussian blur for augmentation
           during pretraining.
-        num_classes (int):  Number of classes for the supervised head.  
+        num_classes (int):  Number of classes for the supervised head.
       """
       for argname, argval in dict(locals()).items():
           setattr(self, argname, argval)
@@ -138,6 +138,16 @@ class SimCLR_Args:
 # -----------------------------------------------------------------------------
 
 def get_args(**kwargs):
+    """Configure a ``SimCLR_Args`` object for training SimCLR.
+
+    Keyword args:
+        **kwargs: Please see the :class:`slideflow.simclr.SimCLR_Args` documentation
+            for information on available parameters.
+
+    Returns:
+        slideflow.simclr.SimCLR_Args
+
+    """
     return SimCLR_Args(**kwargs)
 
 

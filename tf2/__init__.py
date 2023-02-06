@@ -265,7 +265,7 @@ def run_simclr(
   tpu_zone=None,
   gcp_project=None,
 ):
-  """Train SimCLR model
+  """Train a SimCLR model.
 
   Args:
     simCLR_args (SimpleNamespace): SimCLR arguments, as provided by
