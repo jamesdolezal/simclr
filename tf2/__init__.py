@@ -91,6 +91,8 @@ def load(path):
     model = model_lib.SimCLR(**args.model_kwargs)
     step = tf.Variable(0, dtype=tf.int64)
     checkpoint = tf.train.Checkpoint(model=model, global_step=step)
+    if path.endswith('.ckpt'):
+        path = path.split('.ckpt')[0]
     checkpoint.restore(path).expect_partial()
     return model
 
