@@ -350,6 +350,10 @@ def run_simclr(
         return
   else:
     summary_writer = tf.summary.create_file_writer(model_dir)
+    if not os.path.exists(model_dir):
+        os.makedirs(model_dir)
+    with open(os.path.join(model_dir, 'args.json'), "w") as data_file:
+      json.dump(args.to_dict(), data_file, indent=1)
     with strategy.scope():
       # Build input pipeline.
       ds = data_lib.build_distributed_dataset(builder, args.train_batch_size,
