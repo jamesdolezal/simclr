@@ -185,7 +185,7 @@ def build_input_fn(builder, global_batch_size, is_training,
         image = preprocess_fn_finetune(image)
       if num_classes:
         label = tf.one_hot(label, num_classes)
-      return image, label, *args
+      return detuple(image, label, args)
 
     logging.info('num_input_pipelines: %d', input_context.num_input_pipelines)
     dataset = builder.as_dataset(
@@ -243,3 +243,26 @@ def get_preprocess_fn(is_training, is_pretrain, image_size, color_jitter_strengt
       is_training=is_training,
       color_distort=is_pretrain,
       test_crop=test_crop)
+
+# -----------------------------------------------------------------------------
+
+def detuple(image, label, args):
+    """Detuple optional arguments for return.
+
+    Adds support for returning args via wildcard in Python 3.7. The following:
+
+    .. code-block:: python
+
+        return image, label, *args
+
+    can be made cross-compatible with Python 3.7 and higher by using:
+
+    .. code-block:: python
+
+        return detuple(image, label, args)
+
+    """
+    if len(args):
+        return tuple([image, label] + list(args))
+    else:
+        return image, label
