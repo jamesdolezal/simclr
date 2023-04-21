@@ -293,6 +293,7 @@ def run_simclr(
       metadata
 
   """
+  logging.debug("Building SimCLR dataset")
   if builder is None:
     builder = tfds.builder(args.dataset, data_dir=args.data_dir)
     builder.download_and_prepare()
@@ -317,6 +318,7 @@ def run_simclr(
 
   topology = None
   if use_tpu:
+    logging.debug("Configuring TPUs")
     if tpu_name:
       cluster = tf.distribute.cluster_resolver.TPUClusterResolver(
           tpu_name, zone=tpu_zone, project=gcp_project)
@@ -331,6 +333,7 @@ def run_simclr(
 
   else:
     # For (multiple) GPUs.
+    logging.debug("Configuring distributed dataset with MirroredStrategy")
     strategy = tf.distribute.MirroredStrategy()
     logging.info('Running using MirroredStrategy on %d replicas',
                  strategy.num_replicas_in_sync)
@@ -339,6 +342,7 @@ def run_simclr(
     model = model_lib.SimCLR(**args.model_kwargs)
 
   if args.mode == 'eval':
+    logging.debug("Performing evaluation")
     for ckpt in tf.train.checkpoints_iterator(
         model_dir, min_interval_secs=15):
       result = perform_evaluation(
@@ -349,6 +353,7 @@ def run_simclr(
         logging.info('Eval complete. Exiting...')
         return
   else:
+    logging.debug("Setting up file writer for logs")
     summary_writer = tf.summary.create_file_writer(model_dir)
     if not os.path.exists(model_dir):
         os.makedirs(model_dir)
@@ -356,6 +361,7 @@ def run_simclr(
       json.dump(args.to_dict(), data_file, indent=1)
     with strategy.scope():
       # Build input pipeline.
+      logging.debug("Setting up distributed dataset")
       ds = data_lib.build_distributed_dataset(builder, args.train_batch_size,
                                               True, args, strategy)
 
@@ -395,6 +401,7 @@ def run_simclr(
         all_metrics.extend([supervised_loss_metric, supervised_acc_metric])
 
       # Restore checkpoint if available.
+      logging.debug("Attempting to restore from checkpoint")
       checkpoint_manager = try_restore_from_checkpoint(
           model, optimizer.iterations, optimizer, model_dir, checkpoint_path,
           keep_checkpoint_max=args.keep_checkpoint_max,
@@ -491,6 +498,7 @@ def run_simclr(
       global_step = optimizer.iterations
       cur_step = global_step.numpy()
       iterator = iter(ds)
+      logging.debug("Beginning training")
       while cur_step < train_steps:
         # Calls to tf.summary.xyz lookup the summary writer resource which is
         # set by the summary writer's context manager.
