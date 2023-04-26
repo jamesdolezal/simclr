@@ -114,7 +114,7 @@ class DatasetBuilder:
                 test=data_util.EasyDict(num_examples=(0 if not self.test_dts else self.test_dts.num_tiles))
             ))
 
-    def as_dataset(self, split, read_config, shuffle_files, as_supervised):
+    def as_dataset(self, split, read_config, shuffle_files, as_supervised, **kwargs):
         logging.info(f"Dataset split requested: {split}")
         if split == 'train':
             dts = self.train_dts
@@ -135,7 +135,8 @@ class DatasetBuilder:
             deterministic=True,
             standardize=False,
             infinite=(split == 'train'),
-            **self.dataset_kwargs
+            **self.dataset_kwargs,
+            **kwargs
         )
 
     def build_dataset(self, *args, **kwargs):
@@ -179,14 +180,14 @@ def build_input_fn(builder, global_batch_size, is_training,
       is_pretrain=True,
       image_size=simclr_args.image_size,
       color_jitter_strength=simclr_args.color_jitter_strength,
-      normalizer=builder.normalizer,
+      normalizer=(builder.normalizer if is_training else None),
       normalizer_augment=simclr_args.stain_augment)
     preprocess_fn_finetune = get_preprocess_fn(
       is_training,
       is_pretrain=False,
       image_size=simclr_args.image_size,
       color_jitter_strength=simclr_args.color_jitter_strength,
-      normalizer=builder.normalizer,
+      normalizer=(builder.normalizer if is_training else None),
       normalizer_augment=simclr_args.stain_augment)
     num_classes = builder.info.features['label'].num_classes
 
@@ -204,6 +205,13 @@ def build_input_fn(builder, global_batch_size, is_training,
       return detuple(image, label, args)
 
     logging.info('num_input_pipelines: %d', input_context.num_input_pipelines)
+
+    # Perform stain normalization within sf.Dataset.tensorflow()
+    # If this is for inference.
+    if builder.normalizer and not is_training:
+      dts_kw = dict(normalizer=builder.normalizer)
+    else:
+      dts_kw = {}
     dataset = builder.as_dataset(
         split=simclr_args.train_split if is_training else simclr_args.eval_split,
         shuffle_files=is_training,
@@ -214,7 +222,8 @@ def build_input_fn(builder, global_batch_size, is_training,
         read_config=tfds.ReadConfig(
             interleave_cycle_length=32,
             interleave_block_length=1,
-            input_context=input_context))
+            input_context=input_context),
+        **dts_kw)
     if cache_dataset:
       dataset = dataset.cache()
     if is_training:
@@ -254,15 +263,15 @@ def get_preprocess_fn(is_training, is_pretrain, image_size,
   else:
     test_crop = True
   return functools.partial(
-      data_util.preprocess_image,
-      height=image_size,
-      width=image_size,
-      color_jitter_strength=color_jitter_strength,
-      is_training=is_training,
-      color_distort=is_pretrain,
-      test_crop=test_crop,
-      normalizer=normalizer,
-      normalizer_augment=normalizer_augment)
+    data_util.preprocess_image,
+    height=image_size,
+    width=image_size,
+    color_jitter_strength=color_jitter_strength,
+    is_training=is_training,
+    color_distort=is_pretrain,
+    test_crop=test_crop,
+    normalizer=normalizer,
+    normalizer_augment=normalizer_augment)
 
 # -----------------------------------------------------------------------------
 
