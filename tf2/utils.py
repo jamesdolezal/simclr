@@ -51,6 +51,7 @@ class SimCLR_Args:
         color_jitter_strength=1.0,
         use_blur=True,
         num_classes=None,
+        stain_augment=True,
     ) -> None:
       """SimCLR arguments.
 

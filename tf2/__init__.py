@@ -19,6 +19,7 @@ import json
 import math
 import os
 
+from tqdm import tqdm
 from slideflow import log as logging
 from . import data as data_lib
 from . import metrics
@@ -482,18 +483,19 @@ def run_simclr(
     with strategy.scope():
 
       @tf.function
+      def train_single_step(iterator):
+        # Drop the "while" prefix created by tf.while_loop which otherwise
+        # gets prefixed to every variable name. This does not affect training
+        # but does affect the checkpoint conversion script.
+        # TODO(b/161712658): Remove this.
+        with tf.name_scope(''):
+          images, labels = next(iterator)
+          features, labels = images, {'labels': labels}
+          strategy.run(single_step, (features, labels))
+
       def train_multiple_steps(iterator):
-        # `tf.range` is needed so that this runs in a `tf.while_loop` and is
-        # not unrolled.
-        for _ in tf.range(steps_per_loop):
-          # Drop the "while" prefix created by tf.while_loop which otherwise
-          # gets prefixed to every variable name. This does not affect training
-          # but does affect the checkpoint conversion script.
-          # TODO(b/161712658): Remove this.
-          with tf.name_scope(''):
-            images, labels = next(iterator)
-            features, labels = images, {'labels': labels}
-            strategy.run(single_step, (features, labels))
+        for _ in tqdm(range(steps_per_loop)):
+          train_single_step(iterator)
 
       global_step = optimizer.iterations
       cur_step = global_step.numpy()

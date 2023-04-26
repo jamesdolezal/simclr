@@ -464,7 +464,9 @@ def preprocess_for_train(
     color_distort=True,
     crop=True,
     flip=True,
-    impl='simclrv2'
+    impl='simclrv2',
+    normalizer=None,
+    normalizer_augment=True,
 ):
   """Preprocesses the given image for training.
 
@@ -481,6 +483,9 @@ def preprocess_for_train(
   Returns:
     A preprocessed image `Tensor`.
   """
+  if normalizer:
+    image = normalizer.transform(image, augment=normalizer_augment)
+  image = tf.image.convert_image_dtype(image, dtype=tf.float32)
   if crop:
     image = random_crop_with_resize(image, height, width)
   if flip:
@@ -493,7 +498,7 @@ def preprocess_for_train(
   return image
 
 
-def preprocess_for_eval(image, height, width, crop=True):
+def preprocess_for_eval(image, height, width, crop=True, normalizer=None):
   """Preprocesses the given image for evaluation.
 
   Args:
@@ -505,6 +510,9 @@ def preprocess_for_eval(image, height, width, crop=True):
   Returns:
     A preprocessed image `Tensor`.
   """
+  if normalizer:
+    image = normalizer.transform(image)
+  image = tf.image.convert_image_dtype(image, dtype=tf.float32)
   if crop:
     image = center_crop(image, height, width, crop_proportion=CROP_PROPORTION)
   image = tf.reshape(image, [height, width, 3])
@@ -512,8 +520,9 @@ def preprocess_for_eval(image, height, width, crop=True):
   return image
 
 
-def preprocess_image(image, height, width, color_jitter_strength=1.0, is_training=False,
-                     color_distort=True, test_crop=True):
+def preprocess_image(image, height, width, color_jitter_strength=1.0,
+                     is_training=False, color_distort=True, test_crop=True,
+                     normalizer=None, normalizer_augment=True):
   """Preprocesses the given image.
 
   Args:
@@ -528,8 +537,13 @@ def preprocess_image(image, height, width, color_jitter_strength=1.0, is_trainin
   Returns:
     A preprocessed image `Tensor` of range [0, 1].
   """
-  image = tf.image.convert_image_dtype(image, dtype=tf.float32)
   if is_training:
-    return preprocess_for_train(image, height, width, color_jitter_strength, color_distort)
+    return preprocess_for_train(
+        image, height, width, color_jitter_strength, color_distort,
+        normalizer=normalizer, normalizer_augment=normalizer_augment
+    )
   else:
-    return preprocess_for_eval(image, height, width, test_crop)
+    return preprocess_for_eval(
+        image, height, width, test_crop,
+        normalizer=normalizer
+    )

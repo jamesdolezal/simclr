@@ -16,6 +16,7 @@
 """Data pipeline."""
 
 import functools
+import slideflow as sf
 from slideflow import log as logging
 
 from . import data_util
@@ -26,8 +27,8 @@ import tensorflow_datasets as tfds
 class DatasetBuilder:
 
     def __init__(self, train_dts=None, val_dts=None, test_dts=None, *, labels=None,
-                 val_kwargs=None, steps_per_epoch_override=None,
-                 dataset_kwargs=None):
+                 val_kwargs=None, steps_per_epoch_override=None, normalizer=None,
+                 normalizer_source=None, dataset_kwargs=None):
         """Build a training/validation dataset pipeline for SimCLR.
 
         Args:
@@ -94,6 +95,13 @@ class DatasetBuilder:
             train_tiles = self.train_dts.num_tiles
         else:
             train_tiles = 0
+
+        if isinstance(normalizer, str):
+            self.normalizer = sf.norm.autoselect(normalizer,
+                                                 source=normalizer_source,
+                                                 backend='tensorflow')
+        else:
+            self.normalizer = normalizer
         self.num_classes = 0 if self.labels is None else len(set(list(self.labels.values())))
         self.dataset_kwargs = dict() if dataset_kwargs is None else dataset_kwargs
         self.info = data_util.EasyDict(
@@ -167,11 +175,19 @@ def build_input_fn(builder, global_batch_size, is_training,
     logging.info('Global batch size: %d', global_batch_size)
     logging.info('Per-replica batch size: %d', batch_size)
     preprocess_fn_pretrain = get_preprocess_fn(
-      is_training, is_pretrain=True, image_size=simclr_args.image_size,
-      color_jitter_strength=simclr_args.color_jitter_strength)
+      is_training,
+      is_pretrain=True,
+      image_size=simclr_args.image_size,
+      color_jitter_strength=simclr_args.color_jitter_strength,
+      normalizer=builder.normalizer,
+      normalizer_augment=simclr_args.stain_augment)
     preprocess_fn_finetune = get_preprocess_fn(
-      is_training, is_pretrain=False, image_size=simclr_args.image_size,
-      color_jitter_strength=simclr_args.color_jitter_strength)
+      is_training,
+      is_pretrain=False,
+      image_size=simclr_args.image_size,
+      color_jitter_strength=simclr_args.color_jitter_strength,
+      normalizer=builder.normalizer,
+      normalizer_augment=simclr_args.stain_augment)
     num_classes = builder.info.features['label'].num_classes
 
     def map_fn(image, label, *args):
@@ -228,7 +244,9 @@ def build_distributed_dataset(builder, batch_size, is_training, simclr_args,
   return strategy.distribute_datasets_from_function(input_fn)
 
 
-def get_preprocess_fn(is_training, is_pretrain, image_size, color_jitter_strength=1.0):
+def get_preprocess_fn(is_training, is_pretrain, image_size,
+                      color_jitter_strength=1.0, normalizer=None,
+                      normalizer_augment=True):
   """Get function that accepts an image and returns a preprocessed image."""
   # Disable test cropping for small images (e.g. CIFAR)
   if image_size <= 32:
@@ -242,7 +260,9 @@ def get_preprocess_fn(is_training, is_pretrain, image_size, color_jitter_strengt
       color_jitter_strength=color_jitter_strength,
       is_training=is_training,
       color_distort=is_pretrain,
-      test_crop=test_crop)
+      test_crop=test_crop,
+      normalizer=normalizer,
+      normalizer_augment=normalizer_augment)
 
 # -----------------------------------------------------------------------------
 
