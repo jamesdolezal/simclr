@@ -11,10 +11,10 @@ from slideflow import log
 class SimCLR_Args:
     def __init__(
         self,
-        learning_rate=0.3,
-        learning_rate_scaling='linear',
+        learning_rate=0.075,
+        learning_rate_scaling='sqrt',
         warmup_epochs=10,
-        weight_decay=1e-6,
+        weight_decay=1e-4,
         batch_norm_decay=0.9,
         train_batch_size=512,
         train_split='train',
