@@ -99,10 +99,6 @@ class DropBlock(tf.keras.layers.Layer):  # pylint: disable=missing-docstring
     if not training or keep_prob is None:
       return net
 
-    tf.logging.info(
-        'Applying DropBlock: dropblock_size {}, net.shape {}'.format(
-            dropblock_size, net.shape))
-
     if data_format == 'channels_last':
       _, width, height, _ = net.get_shape().as_list()
     else:
@@ -127,7 +123,7 @@ class DropBlock(tf.keras.layers.Layer):  # pylint: disable=missing-docstring
     valid_block_center = tf.expand_dims(
         valid_block_center, -1 if data_format == 'channels_last' else 0)
 
-    randnoise = tf.random_uniform(net.shape, dtype=tf.float32)
+    randnoise = tf.random.uniform(net.shape, dtype=tf.float32)
     block_pattern = (
         1 - tf.cast(valid_block_center, dtype=tf.float32) + tf.cast(
             (1 - seed_drop_rate), dtype=tf.float32) + randnoise) >= 1
