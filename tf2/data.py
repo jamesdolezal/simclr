@@ -255,10 +255,10 @@ def build_distributed_dataset(builder, batch_size, is_training, simclr_args,
 
 def get_preprocess_fn(is_training, is_pretrain, image_size,
                       color_jitter_strength=1.0, normalizer=None,
-                      normalizer_augment=True):
+                      normalizer_augment=True, center_crop=True):
   """Get function that accepts an image and returns a preprocessed image."""
   # Disable test cropping for small images (e.g. CIFAR)
-  if image_size <= 32:
+  if not center_crop or image_size <= 32:
     test_crop = False
   else:
     test_crop = True

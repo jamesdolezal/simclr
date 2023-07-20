@@ -408,7 +408,7 @@ def run_simclr(
           keep_checkpoint_max=args.keep_checkpoint_max,
           zero_init_logits_layer=args.zero_init_logits_layer)
 
-    steps_per_loop = checkpoint_steps
+    steps_per_loop = min(checkpoint_steps, train_steps)
 
     def single_step(features, labels):
       with tf.GradientTape() as tape:

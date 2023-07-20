@@ -125,6 +125,12 @@ class SimCLR_Args:
         return {k:v for k,v in vars(self).items()
                 if k not in ('model_kwargs', 'self')}
 
+    def __repr__(self):
+        return '{}(\n{}\n)'.format(
+            self.__class__.__name__,
+            ',\n'.join('  {}={!r}'.format(k, v) for k, v in self.to_dict().items())
+        )
+
     @property
     def model_kwargs(self):
         return {
