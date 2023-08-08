@@ -79,7 +79,7 @@ def save(model, destination, simclr_args, global_step=None, named_by_step=False)
     json.dump(simclr_args.to_dict(), data_file, indent=1)
 
 
-def load(path):
+def load(path, as_pretrained: bool = False):
     """Load a SavedModel or checkpoint for inference.
 
     Args:
@@ -89,6 +89,8 @@ def load(path):
         Tensorflow SimCLR model.
     """
     args = utils_lib.load_model_args(path)
+    if as_pretrained:
+      args.train_mode = 'pretrain'
     model = model_lib.SimCLR(**args.model_kwargs)
     step = tf.Variable(0, dtype=tf.int64)
     checkpoint = tf.train.Checkpoint(model=model, global_step=step)
