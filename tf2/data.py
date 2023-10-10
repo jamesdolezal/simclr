@@ -132,7 +132,6 @@ class DatasetBuilder:
             labels=self.labels,
             num_shards=read_config.input_context.num_input_pipelines,
             shard_idx=read_config.input_context.input_pipeline_id,
-            deterministic=True,
             standardize=False,
             infinite=(split == 'train'),
             **self.dataset_kwargs,
